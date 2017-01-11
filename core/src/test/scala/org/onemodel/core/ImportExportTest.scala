@@ -52,7 +52,8 @@ class ImportExportTest extends FlatSpec with MockitoSugar {
     mDB.createRelationType("a test relation type","","UNI")
     // idea: fix the bad smell: shouldn't need a ui (& maybe not a controller?) to run tests of logic.  Noted in tasks to fix.
     //(ALSO FIX SIMILAR USAGE IN PostgreSQLDatabaseTest.)
-    mImportExport = new ImportExport(ui, mDB, new Controller(ui, false, Some(Database.TEST_USER), Some(Database.TEST_USER)))
+    mImportExport = new ImportExport(ui, new Controller(ui, forceUserPassPromptIn = false,
+                                                             defaultUsernameIn = Some(Database.TEST_USER), defaultPasswordIn = Some(Database.TEST_USER)))
 
     val entityId: Long = mDB.createEntity("test object")
     mEntity = new Entity(mDB, entityId)
@@ -68,15 +69,15 @@ class ImportExportTest extends FlatSpec with MockitoSugar {
     val startingEntity: Entity = new Entity(mDB, entityId)
 
     // see comments in ImportExport.export() method for explanation of the next few lines:
-    val exportedEntityIds = new mutable.TreeSet[Long]
+    val exportedEntityIds = new mutable.TreeSet[String]
     val cachedEntities = new mutable.HashMap[Long, Entity]
     val cachedAttrs = new mutable.HashMap[Long, Array[(Long, Attribute)]]
     val cachedGroupInfo = new mutable.HashMap[Long, Array[Long]]
 
     val prefix: String = mImportExport.getExportFileNamePrefix(startingEntity, ImportExport.HTML_EXPORT_TYPE)
     val outputDirectory: Path = mImportExport.createOutputDir("omtest-" + prefix)
-    val uriClassId: Long = mDB.getOrCreateClassAndTemplateEntityIds("URI", callerManagesTransactionsIn = true)._1
-    val quoteClassId = mDB.getOrCreateClassAndTemplateEntityIds("quote", callerManagesTransactionsIn = true)._1
+    val uriClassId: Long = startingEntity.mDB.getOrCreateClassAndTemplateEntity("URI", callerManagesTransactionsIn = true)._1
+    val quoteClassId = startingEntity.mDB.getOrCreateClassAndTemplateEntity("quote", callerManagesTransactionsIn = true)._1
     mImportExport.exportHtml(startingEntity, levelsToExportIsInfinite = true, 0, outputDirectory, exportedEntityIds, cachedEntities, cachedAttrs,
                              cachedGroupInfo, mutable.TreeSet[Long](), uriClassId, quoteClassId, includePublicData = true, includeNonPublicData = true,
                              includeUnspecifiedData = true, None, None, Some("2015 thisisatestpersonname"))
@@ -150,7 +151,7 @@ class ImportExportTest extends FlatSpec with MockitoSugar {
     val relationTypeId = mDB.findRelationType(Database.theHASrelationTypeName, Some(1)).get(0)
     for (entityId: Long <- ids) {
       // (could have used mDB.getContainingEntities1 here perhaps)
-      if (mDB.relationToEntityExists(relationTypeId, mEntity.getId, entityId)) {
+      if (mDB.relationToLocalEntityExists(relationTypeId, mEntity.getId, entityId)) {
         foundIt = true
       }
     }

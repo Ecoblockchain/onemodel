@@ -1,0 +1,1 @@
+This directory is for dejagnu tests, mainly intended for testing the Text UI / controller features that did not seem to lend themselves to automated testing before with testNG.

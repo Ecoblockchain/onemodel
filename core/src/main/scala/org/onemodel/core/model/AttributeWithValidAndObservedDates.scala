@@ -12,8 +12,6 @@
 */
 package org.onemodel.core.model
 
-import org.onemodel.core.model.Database
-
 object AttributeWithValidAndObservedDates {
   def getDatesDescription(mValidOnDate:Option[Long], mObservationDate:Long): String = {
     val validDateDescr: String =

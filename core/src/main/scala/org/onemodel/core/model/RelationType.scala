@@ -12,13 +12,12 @@
 */
 package org.onemodel.core.model
 
-import org.onemodel.core.model.Database
 import org.onemodel.core.{OmException, Util}
 
 /** Represents one RelationType object in the system.
   */
 object RelationType {
-  def getNameLength(dbIn: Database): Int = {
+  def getNameLength: Int = {
     Database.relationTypeNameLength
   }
 
@@ -33,7 +32,7 @@ object RelationType {
     a Database instance?).
   */
 class RelationType(mDB: Database, mId: Long) extends Entity(mDB, mId) {
-  // (See comment at similar location in BooleanAttribute.)
+  // (See comment in similar spot in BooleanAttribute for why not checking for exists, if mDB.isRemote.)
   if (!mDB.isRemote && !mDB.relationTypeKeyExists(mId)) {
     throw new Exception("Key " + mId + Util.DOES_NOT_EXIST)
   }
@@ -86,6 +85,16 @@ class RelationType(mDB: Database, mId: Long) extends Entity(mDB, mId) {
     mNameInReverseDirection = relationTypeData(1).get.asInstanceOf[String]
     mDirectionality = relationTypeData(2).get.asInstanceOf[String].trim
     mAlreadyReadData = true
+  }
+
+  def update(nameIn: String, nameInReverseDirectionIn: String, directionalityIn: String): Unit = {
+    if (!mAlreadyReadData) readDataFromDB()
+    if (nameIn != mName || nameInReverseDirectionIn != mNameInReverseDirection || directionalityIn != mDirectionality) {
+      mDB.updateRelationType(getId, nameIn, nameInReverseDirectionIn, directionalityIn)
+      mName = nameIn
+      mNameInReverseDirection = nameInReverseDirectionIn
+      mDirectionality = directionalityIn
+    }
   }
 
   /** Removes this object from the system.

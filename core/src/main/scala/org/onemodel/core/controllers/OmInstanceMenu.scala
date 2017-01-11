@@ -10,9 +10,20 @@
 package org.onemodel.core.controllers
 
 import org.onemodel.core.TextUI
-import org.onemodel.core.model.{Database, OmInstance}
+import org.onemodel.core.model.OmInstance
 
-class OmInstanceMenu(val ui: TextUI, db: Database, controller: Controller) {
+/*
+so, thought is, to try it:
+ x- in model objects' menus, don't pass a db.
+ x- Get rid of it is a parm, wherever possible...?
+ x- when they need a db, get it from the model object
+ x- all this is to prevent using the wrong db, ever
+ x- when call back to a controller method and it needs a db, but/because there is no model object (it is creating one), controller will use its own db var: carefully.
+ %%- WHERE DOC/cmt THIS IDEA to explain, and as a guide FOR FUTURE WORK?
+ and doc 4 devs?: that:
+   groups dont contain remote entities, so some logic doesn't have to be written.
+*/
+class OmInstanceMenu(val ui: TextUI, controller: Controller) {
   /** returns None if user wants out. */
   //@tailrec //see comment re this on EntityMenu
   //scoping idea: see idea at beginning of EntityMenu.entityMenu
@@ -30,9 +41,10 @@ class OmInstanceMenu(val ui: TextUI, db: Database, controller: Controller) {
       else {
         val answer = response.get
         if (answer == 3) {
-          val id: Option[String] = controller.askForAndWriteOmInstanceInfo(Some(omInstanceIn.getId), Some(omInstanceIn.getAddress))
+          val id: Option[String] = controller.askForAndWriteOmInstanceInfo(omInstanceIn.mDB, Some(omInstanceIn))
           if (id.isDefined) {
-            omInstanceMenu(new OmInstance(db, id.get))
+            // possible was some modification; reread from db to get new values:
+            omInstanceMenu(new OmInstance(omInstanceIn.mDB, id.get))
           } else {
             omInstanceMenu(omInstanceIn)
           }
@@ -52,7 +64,7 @@ class OmInstanceMenu(val ui: TextUI, db: Database, controller: Controller) {
       }
     } catch {
       case e: Exception =>
-        org.onemodel.core.Util.handleException(e, controller.ui, controller.db)
+        org.onemodel.core.Util.handleException(e, ui, omInstanceIn.mDB)
         val ans = ui.askYesNoQuestion("Go back to what you were doing (vs. going out)?",Some("y"))
         if (ans.isDefined && ans.get) omInstanceMenu(omInstanceIn)
         else None

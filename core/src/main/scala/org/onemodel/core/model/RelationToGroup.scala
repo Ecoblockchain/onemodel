@@ -15,7 +15,6 @@
 */
 package org.onemodel.core.model
 
-import org.onemodel.core.model.Database
 import org.onemodel.core.{OmException, Util}
 
 object RelationToGroup {
@@ -33,9 +32,9 @@ object RelationToGroup {
   }
 }
 
-/** See comments on similar methods in RelationToEntity. */
-class RelationToGroup(mDB: Database, mId: Long, mEntityId:Long, mRelTypeId: Long, mGroupId:Long) extends AttributeWithValidAndObservedDates(mDB, mId) {
-  // (See comment at similar location in BooleanAttribute.)
+/** See comments on similar methods in RelationToEntity (or maybe its subclasses). */
+class RelationToGroup(mDB: Database, mId: Long, mEntityId:Long, mRelTypeId: Long, mGroupId: Long) extends AttributeWithValidAndObservedDates(mDB, mId) {
+  // (See comment in similar spot in BooleanAttribute for why not checking for exists, if mDB.isRemote.)
   if (mDB.isRemote || mDB.relationToGroupKeysExistAndMatch(mId, mEntityId, mRelTypeId, mGroupId)) {
     // something else might be cleaner, but these are the same thing and we need to make sure the superclass' var doesn't overwrite this w/ 0:
     mAttrTypeId = mRelTypeId
@@ -75,9 +74,13 @@ class RelationToGroup(mDB: Database, mId: Long, mEntityId:Long, mRelTypeId: Long
                            relationData(5).get.asInstanceOf[Long], relationData(6).get.asInstanceOf[Long])
   }
 
+  def move(newContainingEntityIdIn: Long, sortingIndexIn: Long): Long = {
+    mDB.moveRelationToGroup(getId, newContainingEntityIdIn, sortingIndexIn)
+  }
+
   def update(newRelationTypeIdIn: Option[Long], newGroupIdIn: Option[Long], validOnDateIn:Option[Long], observationDateIn:Option[Long]) {
     //use validOnDateIn rather than validOnDateIn.get because validOnDate allows None, unlike others
-    //Idea/possible bug: see comment on similar method in RelationToEntity.
+    //Idea/possible bug: see comment on similar method in RelationToEntity (or maybe in its subclasses).
     val newRelationTypeId: Long = if (newRelationTypeIdIn.isDefined) newRelationTypeIdIn.get else getAttrTypeId
     val newGroupId: Long = if (newGroupIdIn.isDefined) newGroupIdIn.get else getGroupId
     val vod = if (validOnDateIn.isDefined) validOnDateIn else getValidOnDate

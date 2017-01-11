@@ -14,7 +14,7 @@ import org.scalatest.mockito.MockitoSugar
 import org.scalatest.FlatSpec
 
 class RelationToEntityTest extends FlatSpec with MockitoSugar {
-  "getDisplayString" should "return correct string and length" in {
+  "getDisplayString" should "return correct strings and length" in {
     val mockDB = mock[PostgreSQLDatabase]
     val mockRelationType = mock[RelationType]
     val mockEntity1 = mock[Entity]
@@ -35,17 +35,24 @@ class RelationToEntityTest extends FlatSpec with MockitoSugar {
     when(mockEntity1.getId).thenReturn(entity1Id)
     when(mockEntity1.getName).thenReturn(entity1Name)
     when(mockEntity2.getName).thenReturn(entity2Name)
-    when(mockDB.relationToEntityKeysExistAndMatch(rteId, relTypeId, entity1Id, entity2Id)).thenReturn(true)
+    when(mockDB.relationToLocalEntityKeysExistAndMatch(rteId, relTypeId, entity1Id, entity2Id)).thenReturn(true)
 
     // (using arbitrary numbers for the unnamed parameters):
-    val relation = new RelationToEntity(mockDB, rteId, relTypeId, entity1Id, entity2Id, None, date, 0)
+    val rtle = new RelationToLocalEntity(mockDB, rteId, relTypeId, entity1Id, entity2Id, None, date, 0)
     val smallLimit = 15
-    val displayed1: String = relation.getDisplayString(smallLimit, Some(mockEntity2), Some(mockRelationType))
-    val observedDateOutput = "Wed 1969-12-31 17:00:00:"+date+" MST"
-    val wholeThing: String = relationTypeName + ": " + entity2Name + "; valid unsp'd, obsv'd "+observedDateOutput
-    val expected = wholeThing.substring(0, smallLimit - 3) + "..."
-    assert(displayed1 == expected)
+    val displayed1: String = rtle.getDisplayString(smallLimit, Some(mockEntity2), Some(mockRelationType))
+    val expectedObservedDateOutput = "Wed 1969-12-31 17:00:00:"+date+" MST"
+    val wholeExpectedThing: String = relationTypeName + ": " + entity2Name + "; valid unsp'd, obsv'd "+expectedObservedDateOutput
+    val expected = wholeExpectedThing.substring(0, smallLimit - 3) + "..."
+    assert(displayed1 == expected, "unexpected contents: " + displayed1)
 
+    val rtre = new RelationToLocalEntity(mockDB, rteId, relTypeId, entity1Id, entity2Id, None, date, 0)
+    val displayed2: String = rtre.getDisplayString(smallLimit, Some(mockEntity2), Some(mockRelationType))
+    val expectedObservedDateOutput2 = "Wed 1969-12-31 17:00:00:"+date+" MST"
+    val wholeExpectedThing2: String = relationTypeName + ": " + entity2Name + "; valid unsp'd, obsv'd "+expectedObservedDateOutput
+    val expected2 = wholeExpectedThing2.substring(0, smallLimit - 3) + "..."
+    assert(displayed2.contains(" (at "), "unexpected contents: " + displayed2)
+    assert(displayed2 == expected2, "unexpected contents: " + displayed2)
     // the next part passes in intellij 12, but not from the cli as "mvn test". Maybe due to some ignorance
     // about mockito.  It gets this NPE, but unclear why it calls the method given the mock. Here's the failure description
             /*should return correct string and length *** FAILED ***

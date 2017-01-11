@@ -12,7 +12,6 @@ package org.onemodel.web.controllers
 
 import java.nio.file.Path
 import java.util
-import java.util.ArrayList
 
 import org.apache.commons.io.FilenameUtils
 import org.onemodel.core._
@@ -61,7 +60,7 @@ class Rest extends play.api.mvc.Controller {
 
   def id: Action[AnyContent] = Action { implicit request =>
     // This puts quotes around it...
-    val localId: String = db.getId
+    val localId: String = db.id
     val msg = new JsString(localId)
     // ...but this one does not. Does it matter? could switch it, then in OM as the rest client try MM 8 then the remote instance check when editing &
     // adding a port # or similar change so it tries the connection to test the difference.
@@ -151,12 +150,18 @@ class Rest extends play.api.mvc.Controller {
                                                 jsonObject = jsonObject + ("groupId" -> JsNumber(a.getGroupId))
                                                 val group = new Group(db, a.getGroupId)
                                                 jsonObject = jsonObject + ("groupName" -> JsString(group.getName))
-                                              case a: RelationToEntity =>
+                                              case a: RelationToLocalEntity =>
                                                 val relType = new RelationType(db, a.getAttrTypeId)
                                                 jsonObject = jsonObject + ("relationTypeName" -> JsString(relType.getName))
                                                 jsonObject = jsonObject + ("entity2Id" -> JsNumber(a.getRelatedId2))
                                                 val entity2 = new Entity(db, a.getRelatedId2)
                                                 jsonObject = jsonObject + ("entity2Name" -> JsString(entity2.getName))
+                                              case a: RelationToRemoteEntity =>
+                                                val relType = new RelationType(db, a.getAttrTypeId)
+                                                jsonObject = jsonObject + ("relationTypeName" -> JsString(relType.getName))
+                                                jsonObject = jsonObject + ("remote: entity2Id" -> JsNumber(a.getRelatedId2))
+                                                val entity2 = new Entity(db, a.getRelatedId2)
+                                                jsonObject = jsonObject + ("remote: entity2Name" -> JsString(entity2.getName))
                                               case _ => throw new OmException("Unexpected type: " + attribute.getClass.getCanonicalName)
                                             }
                                             jsonObject
@@ -251,7 +256,7 @@ class Rest extends play.api.mvc.Controller {
   /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
 
   def getGroupSortingIndex(groupIdIn: Long, entityIdIn: Long): Action[AnyContent] = Action { implicit request =>
-    Ok(new JsNumber(db.getGroupSortingIndex(groupIdIn, entityIdIn))).as(JSON)
+    Ok(new JsNumber(db.getGroupEntrySortingIndex(groupIdIn, entityIdIn))).as(JSON)
   }
 
   /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
@@ -278,8 +283,23 @@ class Rest extends play.api.mvc.Controller {
     Ok(new JsNumber(db.getCountOfGroupsContainingEntity(entityIdIn))).as(JSON)
   }
 
-  def getRelationToEntityCount(entityIdIn: Long, includeArchivedEntitiesIn: Boolean): Action[AnyContent] = Action { implicit request =>
-    Ok(new JsNumber(db.getRelationToEntityCount(entityIdIn, includeArchivedEntitiesIn))).as(JSON)
+  /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
+  def getRelationTypeCount: Action[AnyContent] = Action { implicit request =>
+    Ok(new JsNumber(db.getRelationTypeCount)).as(JSON)
+  }
+
+  /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
+  def getEntityCount: Action[AnyContent] = Action { implicit request =>
+    Ok(new JsNumber(db.getEntityCount)).as(JSON)
+  }
+
+  /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
+  def getOmInstanceCount: Action[AnyContent] = Action { implicit request =>
+    Ok(new JsNumber(db.getOmInstanceCount)).as(JSON)
+  }
+
+  def getRelationToLocalEntityCount(entityIdIn: Long, includeArchivedEntitiesIn: Boolean): Action[AnyContent] = Action { implicit request =>
+    Ok(new JsNumber(db.getRelationToLocalEntityCount(entityIdIn, includeArchivedEntitiesIn))).as(JSON)
   }
 
   def getRelationToGroupCount(entityIdIn: Long): Action[AnyContent] = Action { implicit request =>
@@ -293,6 +313,11 @@ class Rest extends play.api.mvc.Controller {
   /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
   def getClassCount2(templateEntityIdIn: Long): Action[AnyContent] = Action { implicit request =>
     Ok(new JsNumber(db.getClassCount(Some(templateEntityIdIn)))).as(JSON)
+  }
+
+  def getGroupCount: Action[AnyContent] = Action { implicit request =>
+    val count = db.getGroupCount
+    Ok(new JsNumber(count)).as(JSON)
   }
 
   def findUnusedAttributeSortingIndex(entityIdIn: Long): Action[AnyContent] = Action { implicit request =>
@@ -315,8 +340,12 @@ class Rest extends play.api.mvc.Controller {
     Ok(msg).as(JSON)
   }
 
-  def relationTypeKeyExists(idIn: Long): Action[AnyContent] = Action { implicit request =>
+   def relationTypeKeyExists(idIn: Long): Action[AnyContent] = Action { implicit request =>
     Ok(new JsBoolean(db.relationTypeKeyExists(idIn))).as(JSON)
+  }
+
+   def relationToGroupKeyExists(idIn: Long): Action[AnyContent] = Action { implicit request =>
+    Ok(new JsBoolean(db.relationToGroupKeyExists(idIn: Long))).as(JSON)
   }
 
   def quantityAttributeKeyExists(idIn: Long): Action[AnyContent] = Action { implicit request =>
@@ -358,6 +387,15 @@ class Rest extends play.api.mvc.Controller {
     Ok(new JsBoolean(db.isDuplicateEntityName(name, Some(idToIgnore)))).as(JSON)
   }
 
+  def isDuplicateClassName(nameIn: String): Action[AnyContent] = Action { implicit request =>
+    Ok(new JsBoolean(db.isDuplicateClassName(nameIn))).as(JSON)
+  }
+
+  /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
+  def isDuplicateClassName2(nameIn: String, selfIdToIgnoreIn: Long): Action[AnyContent] = Action { implicit request =>
+    Ok(new JsBoolean(db.isDuplicateClassName(nameIn, Some(selfIdToIgnoreIn)))).as(JSON)
+  }
+
   def classKeyExists(id: Long): Action[AnyContent] = Action { implicit request =>
     Ok(new JsBoolean(db.classKeyExists(id))).as(JSON)
   }
@@ -388,12 +426,12 @@ class Rest extends play.api.mvc.Controller {
     Ok(new JsBoolean(db.attributeKeyExists(formIdIn, idIn))).as(JSON)
   }
 
-  def relationToEntityKeyExists(idIn: Long): Action[AnyContent] = Action { implicit request =>
-    Ok(new JsBoolean(db.relationToEntityKeyExists(idIn))).as(JSON)
+  def relationToLocalEntityKeyExists(idIn: Long): Action[AnyContent] = Action { implicit request =>
+    Ok(new JsBoolean(db.relationToLocalEntityKeyExists(idIn))).as(JSON)
   }
 
-  def relationToEntityKeysExistAndMatch(id: Long, relationTypeId: Long, entityId1: Long, entityId2: Long): Action[AnyContent] = Action { implicit request =>
-    Ok(new JsBoolean(db.relationToEntityKeysExistAndMatch(id, relationTypeId, entityId1, entityId2))).as(JSON)
+  def relationToLocalEntityKeysExistAndMatch(id: Long, relationTypeId: Long, entityId1: Long, entityId2: Long): Action[AnyContent] = Action { implicit request =>
+    Ok(new JsBoolean(db.relationToLocalEntityKeysExistAndMatch(id, relationTypeId, entityId1, entityId2))).as(JSON)
   }
 
   def relationToRemoteEntityKeyExists(id: Long): Action[AnyContent] = Action { implicit request =>
@@ -480,30 +518,14 @@ class Rest extends play.api.mvc.Controller {
   }
 
   /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
-  def getContainingRelationToGroups(entityId: Long, startingIndexIn: Long, limit: Option[Long]): Action[AnyContent] = Action { implicit request =>
-    val results: ArrayList[RelationToGroup] = db.getContainingRelationToGroups(entityId, startingIndexIn, limit)
-    if (results.isEmpty) {
-      Ok(JsNull).as(JSON)
-    } else {
-      var json = Json.arr()
-      // (The "import scala.collection.JavaConversions._" is so this iterator works (and others like it).  an alternative might
-      // be: "new scala.collection.jcl.ArrayList(results).toList" or just results.toArray.toList or such.)
-      for (result: RelationToGroup <- results) {
-        json = json.append(Json.obj("id" -> result.getId,
-                                    "entityId" -> result.getParentId,
-                                    "relationTypeId" -> result.getAttrTypeId,
-                                    "groupId" -> result.getGroupId,
-                                    "validOnDate" -> result.getValidOnDate,
-                                    "observationDate" -> result.getObservationDate,
-                                    "sortingIndex" -> result.getSortingIndex))
-      }
-      Ok(Json.prettyPrint(json)).as(JSON)
-    }
+  def getContainingRelationsToGroup(entityId: Long, startingIndexIn: Long, limit: Option[Long]): Action[AnyContent] = Action { implicit request =>
+    val results: util.ArrayList[RelationToGroup] = db.getContainingRelationsToGroup(entityId, startingIndexIn, limit)
+    getRelationsToGroupAsJson(results)
   }
 
   /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
   def getTextAttributeByTypeId(entityId: Long, typeId: Long, expectedRows: Option[Int]): Action[AnyContent] = Action { implicit request =>
-    val results: ArrayList[TextAttribute] = db.getTextAttributeByTypeId(entityId, typeId, expectedRows)
+    val results: util.ArrayList[TextAttribute] = db.getTextAttributeByTypeId(entityId, typeId, expectedRows)
     if (results.isEmpty) {
       Ok(JsNull).as(JSON)
     } else {
@@ -522,9 +544,9 @@ class Rest extends play.api.mvc.Controller {
   }
 
   /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
-  def findContainedEntityIds(fromEntityIdIn: Long, searchStringIn: String, levelsRemaining: Int,
+  def findContainedLocalEntityIds(fromEntityIdIn: Long, searchStringIn: String, levelsRemaining: Int,
                              stopAfterAnyFound: Boolean): Action[AnyContent] = Action { implicit request =>
-    val results: mutable.TreeSet[Long] = db.findContainedEntityIds(new mutable.TreeSet[Long](), fromEntityIdIn, searchStringIn,
+    val results: mutable.TreeSet[Long] = db.findContainedLocalEntityIds(new mutable.TreeSet[Long](), fromEntityIdIn, searchStringIn,
                                                                    levelsRemaining, stopAfterAnyFound)
     if (results.isEmpty) {
       Ok(JsNull).as(JSON)
@@ -550,6 +572,18 @@ class Rest extends play.api.mvc.Controller {
       var json = Json.arr()
       for (result: Long <- results) {
         json = json.append(Json.obj("id" -> result))
+      }
+      Ok(Json.prettyPrint(json)).as(JSON)
+    }
+  }
+
+  def getResultingStringsAsJson(results: util.ArrayList[String]): Result = {
+    if (results.isEmpty) {
+      Ok(JsNull).as(JSON)
+    } else {
+      var json = Json.arr()
+      for (result: String <- results) {
+        json = json.append(Json.obj("description" -> result))
       }
       Ok(Json.prettyPrint(json)).as(JSON)
     }
@@ -585,14 +619,15 @@ class Rest extends play.api.mvc.Controller {
     }
   }
 
-  def getShouldCreateDefaultAttributes(classIdIn: Long): Action[AnyContent] = Action { implicit request =>
-    val shouldCreate: Option[Boolean] = db.getShouldCreateDefaultAttributes(classIdIn: Long)
-    if (shouldCreate.isDefined) {
-      Ok(new JsBoolean(shouldCreate.get)).as(JSON)
-    } else {
-      Ok(JsNull).as(JSON)
-    }
-  }
+//  //%%del after tests
+//  def getShouldCreateDefaultAttributes(classIdIn: Long): Action[AnyContent] = Action { implicit request =>
+//    val shouldCreate: Option[Boolean] = db.getShouldCreateDefaultAttributes(classIdIn: Long)
+//    if (shouldCreate.isDefined) {
+//      Ok(new JsBoolean(shouldCreate.get)).as(JSON)
+//    } else {
+//      Ok(JsNull).as(JSON)
+//    }
+//  }
 
   // (About this json conversion: see comment on "implicit val entityWrites".)
   implicit val classWrites = new Writes[EntityClass] {
@@ -729,13 +764,13 @@ class Rest extends play.api.mvc.Controller {
     }
   }
 
-  def getRelationToEntityData(relationTypeIdIn: Long, entityId1In: Long, entityId2In: Long): Action[AnyContent] = Action { implicit request =>
-    val exists: Boolean = db.relationToEntityExists(relationTypeIdIn, entityId1In, entityId2In)
+  def getRelationToLocalEntityData(relationTypeIdIn: Long, entityId1In: Long, entityId2In: Long): Action[AnyContent] = Action { implicit request =>
+    val exists: Boolean = db.relationToLocalEntityExists(relationTypeIdIn, entityId1In, entityId2In)
     /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
     if (!exists) {
       Ok(JsNull).as(JSON)
     } else {
-      val rteData = db.getRelationToEntityData(relationTypeIdIn, entityId1In, entityId2In)
+      val rteData = db.getRelationToLocalEntityData(relationTypeIdIn, entityId1In, entityId2In)
       val json: JsValue = Json.obj("id" -> rteData(0).get.asInstanceOf[Long],
                                    "validOnDate" -> rteData(1).asInstanceOf[Option[Long]],
                                    "observationDate" -> rteData(2).get.asInstanceOf[Long],
@@ -903,6 +938,28 @@ class Rest extends play.api.mvc.Controller {
   }
 
   /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
+  def getContainingRelationToGroupDescriptions(entityIdIn: Long, limitIn: Option[Long]): Action[AnyContent] = Action { implicit request =>
+    val results: util.ArrayList[String] = db.getContainingRelationToGroupDescriptions(entityIdIn: Long, limitIn: Option[Long])
+    getResultingStringsAsJson(results)
+  }
+
+  /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
+  def findJournalEntries(startTimeIn: Long, endTimeIn: Long, limitIn: Option[Long]): Action[AnyContent] = Action { implicit request =>
+    val results: util.ArrayList[(Long, String, Long)] = db.findJournalEntries(startTimeIn: Long, endTimeIn: Long, limitIn: Option[Long])
+    if (results.isEmpty) {
+      Ok(JsNull).as(JSON)
+    } else {
+      var json = Json.arr()
+      for (result: (Long, String, Long) <- results) {
+        json = json.append(Json.obj("insertionDate" -> result._1,
+                                    "description" -> result._2,
+                                    "id" -> result._3))
+      }
+      Ok(Json.prettyPrint(json)).as(JSON)
+    }
+  }
+
+  /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
   def findRelationType(nameIn: String, expectedRowsIn: Option[Int]): Action[AnyContent] = Action { implicit request =>
     val results: util.ArrayList[Long] = db.findRelationType(nameIn, expectedRowsIn)
     getResultingIdsAsJson(results)
@@ -910,7 +967,7 @@ class Rest extends play.api.mvc.Controller {
 
   /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
   def getGroupEntryObjects(groupIdIn: Long, startingObjectIndexIn: Long, maxValsIn: Option[Long]): Action[AnyContent] = Action { implicit request =>
-    val results: ArrayList[Entity] = db.getGroupEntryObjects(groupIdIn, startingObjectIndexIn, maxValsIn)
+    val results: util.ArrayList[Entity] = db.getGroupEntryObjects(groupIdIn, startingObjectIndexIn, maxValsIn)
     if (results.isEmpty) {
       Ok(JsNull).as(JSON)
     } else {
@@ -946,15 +1003,154 @@ class Rest extends play.api.mvc.Controller {
     }
   }
 
+  def getEntitiesAsJson(results: util.ArrayList[Entity]): Result = {
+    if (results.isEmpty) {
+      Ok(JsNull).as(JSON)
+    } else {
+      var json = Json.arr()
+      for (result: Entity <- results) {
+        json = json.append(Json.obj("entityId" -> result.getId,
+                                    "name" -> result.getName,
+                                    "classId" -> result.getClassId,
+                                    "insertionDate" -> result.getInsertionDate,
+                                    "public" -> result.getPublic,
+                                    "archived" -> result.isArchived,
+                                    "newEntriesStickToTop" -> result.getNewEntriesStickToTop))
+      }
+      Ok(Json.prettyPrint(json)).as(JSON)
+    }
+  }
+
+  def getRelationTypesAsJson(results: util.ArrayList[Entity]): Result = {
+    if (results.isEmpty) {
+      Ok(JsNull).as(JSON)
+    } else {
+      var json = Json.arr()
+      for (entity: Entity <- results) {
+        val result = entity.asInstanceOf[RelationType]
+        json = json.append(Json.obj("entityId" -> result.getId,
+                                    "name" -> result.getName,
+                                    "classId" -> result.getClassId,
+                                    "insertionDate" -> result.getInsertionDate,
+                                    "public" -> result.getPublic,
+                                    "archived" -> result.isArchived,
+                                    "newEntriesStickToTop" -> result.getNewEntriesStickToTop,
+                                    "nameInReverseDirection" -> result.getNameInReverseDirection,
+                                    "directionality" -> result.getDirectionality))
+      }
+      Ok(Json.prettyPrint(json)).as(JSON)
+    }
+  }
+
+  def getClassesAsJson(results: util.ArrayList[EntityClass]): Result = {
+    if (results.isEmpty) {
+      Ok(JsNull).as(JSON)
+    } else {
+      var json = Json.arr()
+      for (result: EntityClass <- results) {
+        json = json.append(Json.obj("id" -> result.getId,
+                                    "name" -> result.getName,
+                                    "templateEntityId" -> result.getTemplateEntityId,
+                                    "createDefaultAttributes" -> result.getCreateDefaultAttributes))
+      }
+      Ok(Json.prettyPrint(json)).as(JSON)
+    }
+  }
+
+  def getGroupsAsJson(results: util.ArrayList[Group]): Result = {
+    if (results.isEmpty) {
+      Ok(JsNull).as(JSON)
+    } else {
+      var json = Json.arr()
+      for (result: Group <- results) {
+        json = json.append(Json.obj("groupId" -> result.getId,
+                                    "name" -> result.getName,
+                                    "insertionDate" -> result.getInsertionDate,
+                                    "allowMixedClasses" -> result.getMixedClassesAllowed,
+                                    "newEntriesStickToTop" -> result.getNewEntriesStickToTop))
+      }
+      Ok(Json.prettyPrint(json)).as(JSON)
+    }
+  }
+
+  def getRelationsToGroupAsJson(results: util.ArrayList[RelationToGroup]): Result = {
+    if (results.isEmpty) {
+      Ok(JsNull).as(JSON)
+    } else {
+      var json = Json.arr()
+      // (The "import scala.collection.JavaConversions._" is so this iterator works (and others like it).  an alternative might
+      // be: "new scala.collection.jcl.ArrayList(results).toList" or just results.toArray.toList or such.)
+      for (result: RelationToGroup <- results) {
+        json = json.append(Json.obj("id" -> result.getId,
+                                    "entityId" -> result.getParentId,
+                                    "relationTypeId" -> result.getAttrTypeId,
+                                    "groupId" -> result.getGroupId,
+                                    "validOnDate" -> result.getValidOnDate,
+                                    "observationDate" -> result.getObservationDate,
+                                    "sortingIndex" -> result.getSortingIndex))
+      }
+      Ok(Json.prettyPrint(json)).as(JSON)
+    }
+  }
+
   /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
   def getEntitiesContainingGroup(groupIdIn: Long, startingIndexIn: Long, maxValsIn: Option[Long]): Action[AnyContent] = Action { implicit request =>
-    val results: ArrayList[(Long, Entity)] = db.getEntitiesContainingGroup(groupIdIn, startingIndexIn, maxValsIn)
+    val results: util.ArrayList[(Long, Entity)] = db.getEntitiesContainingGroup(groupIdIn, startingIndexIn, maxValsIn)
     getResultingRelationTypeIdAndEntityAsJson(results)
   }
 
   /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
-  def getEntitiesContainingEntity(entityIdIn: Long, startingIndexIn: Long, maxValsIn: Option[Long]): Action[AnyContent] = Action { implicit request =>
-    val results: util.ArrayList[(Long, Entity)] = db.getEntitiesContainingEntity(entityIdIn, startingIndexIn, maxValsIn)
+  def getEntitiesOnly(startingObjectIndex: Long, limitByClass: Boolean, maxValsIn: Option[Long], classIdIn: Option[Long],
+                      templateEntityIn: Option[Long], groupToOmitIdIn: Option[Long]): Action[AnyContent] = Action { implicit request =>
+    val results: util.ArrayList[Entity] = db.getEntitiesOnly(startingObjectIndex: Long, maxValsIn: Option[Long], classIdIn: Option[Long],
+                                                          limitByClass: Boolean, templateEntityIn: Option[Long], groupToOmitIdIn: Option[Long])
+    getEntitiesAsJson(results)
+  }
+
+  /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
+  def getEntities(startingObjectIndex: Long, maxValsIn: Option[Long]): Action[AnyContent] = Action { implicit request =>
+    val results: util.ArrayList[Entity] = db.getEntities(startingObjectIndex, maxValsIn: Option[Long])
+    getEntitiesAsJson(results)
+  }
+
+  /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
+  def getRelationTypes(startingObjectIndexIn: Long, maxValsIn: Option[Long]): Action[AnyContent] = Action { implicit request =>
+    val results: util.ArrayList[Entity] = db.getRelationTypes(startingObjectIndexIn: Long, maxValsIn: Option[Long])
+    getRelationTypesAsJson(results)
+  }
+
+  /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
+  def getClasses(startingObjectIndexIn: Long, maxValsIn: Option[Long]): Action[AnyContent] = Action { implicit request =>
+    val results: util.ArrayList[EntityClass] = db.getClasses(startingObjectIndexIn: Long, maxValsIn: Option[Long])
+    getClassesAsJson(results)
+  }
+
+  /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
+  def getGroups(startingObjectIndexIn: Long, maxValsIn: Option[Long], groupToOmitIdIn: Option[Long]): Action[AnyContent] = Action { implicit request =>
+    val results: util.ArrayList[Group] = db.getGroups(startingObjectIndexIn: Long, maxValsIn: Option[Long], groupToOmitIdIn: Option[Long])
+    getGroupsAsJson(results)
+  }
+
+  /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
+  def getMatchingEntities(startingObjectIndexIn: Long, maxValsIn: Option[Long], omitEntityIdIn: Option[Long],
+                          nameRegexIn: String): Action[AnyContent] = Action { implicit request =>
+    val results: util.ArrayList[Entity] = db.getMatchingEntities(startingObjectIndexIn: Long, maxValsIn: Option[Long],
+                                                                 omitEntityIdIn: Option[Long], nameRegexIn: String)
+    getEntitiesAsJson(results)
+  }
+
+  /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
+  def getMatchingGroups(startingObjectIndexIn: Long, maxValsIn: Option[Long], omitGroupIdIn: Option[Long],
+                          nameRegexIn: String): Action[AnyContent] = Action { implicit request =>
+    val results: util.ArrayList[Group] = db.getMatchingGroups(startingObjectIndexIn: Long, maxValsIn: Option[Long],
+                                                                 omitGroupIdIn: Option[Long], nameRegexIn: String)
+    getGroupsAsJson(results)
+  }
+
+
+  /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
+  def getLocalEntitiesContainingLocalEntity(entityIdIn: Long, startingIndexIn: Long, maxValsIn: Option[Long]): Action[AnyContent] = Action { implicit request =>
+    val results: util.ArrayList[(Long, Entity)] = db.getLocalEntitiesContainingLocalEntity(entityIdIn, startingIndexIn, maxValsIn)
     getResultingRelationTypeIdAndEntityAsJson(results)
   }
 
@@ -966,8 +1162,8 @@ class Rest extends play.api.mvc.Controller {
   }
 
   /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
-  def getCountOfEntitiesContainingEntity(idIn: Long): Action[AnyContent] = Action { implicit request =>
-    val results: (Long, Long) = db.getCountOfEntitiesContainingEntity(idIn)
+  def getCountOfLocalEntitiesContainingLocalEntity(idIn: Long): Action[AnyContent] = Action { implicit request =>
+    val results: (Long, Long) = db.getCountOfLocalEntitiesContainingLocalEntity(idIn)
     val json = Json.obj("nonArchived" -> results._1, "archived" -> results._2)
     Ok(Json.prettyPrint(json)).as(JSON)
   }
@@ -1101,13 +1297,18 @@ class Rest extends play.api.mvc.Controller {
                      require(a.getRelatedId1 == entityIdIn)
                      jsonObject = jsonObject + ("remoteInstanceId" -> JsString(a.asInstanceOf[RelationToRemoteEntity].getRemoteInstanceId))
                      jsonObject = jsonObject + ("entity2Id" -> JsNumber(a.getRelatedId2))
-                   case a: RelationToEntity =>
-                     // NOTE: this case should come *after* that for RelationToRemoteEntity above, because RelationToRemoteEntity is a subtype of RTE and we don't want
-                     // to skip either one.
+                   case a: RelationToLocalEntity =>
                      jsonObject = jsonObject + ("validOnDate" -> (if (a.getValidOnDate.isEmpty) JsNull else JsNumber(a.getValidOnDate.get)))
                      jsonObject = jsonObject + ("observationDate" -> JsNumber(a.getObservationDate))
                      jsonObject = jsonObject + ("entity1Id" -> JsNumber(a.getRelatedId1))
                      require(a.getRelatedId1 == entityIdIn)
+                     jsonObject = jsonObject + ("entity2Id" -> JsNumber(a.getRelatedId2))
+                   case a: RelationToRemoteEntity =>
+                     jsonObject = jsonObject + ("validOnDate" -> (if (a.getValidOnDate.isEmpty) JsNull else JsNumber(a.getValidOnDate.get)))
+                     jsonObject = jsonObject + ("observationDate" -> JsNumber(a.getObservationDate))
+                     jsonObject = jsonObject + ("entity1Id" -> JsNumber(a.getRelatedId1))
+                     require(a.getRelatedId1 == entityIdIn)
+                     jsonObject = jsonObject + ("remoteInstanceId" -> JsString(a.getRemoteInstanceId))
                      jsonObject = jsonObject + ("entity2Id" -> JsNumber(a.getRelatedId2))
                    case a: RelationToGroup =>
                      jsonObject = jsonObject + ("validOnDate" -> (if (a.getValidOnDate.isEmpty) JsNull else JsNumber(a.getValidOnDate.get)))

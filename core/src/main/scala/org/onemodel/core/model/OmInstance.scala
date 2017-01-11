@@ -13,7 +13,6 @@
 package org.onemodel.core.model
 
 import org.onemodel.core._
-import org.onemodel.core.model.Database
 
 object OmInstance {
   def addressLength: Int = Database.omInstanceAddressLength
@@ -35,8 +34,9 @@ object OmInstance {
   * This 1st constructor instantiates an existing object from the DB. Generally use Model.createObject() to create a new object.
   * Note: Having Entities and other DB objects be readonly makes the code clearer & avoid some bugs, similarly to reasons for immutability in scala.
   */
-class OmInstance(mDB: Database, mId: String) {
-  // (See comment at similar location in BooleanAttribute.)
+class OmInstance(val mDB: Database, mId: String) {
+  //%%idea: make mId *etc* private in all model classes? and rename mDB to just db ("uniform access principle")?
+  // (See comment in similar spot in BooleanAttribute for why not checking for exists, if mDB.isRemote.)
   if (!mDB.isRemote && !mDB.omInstanceKeyExists(mId)) {
     throw new OmException("Key " + mId + Util.DOES_NOT_EXIST)
   }
@@ -101,6 +101,10 @@ class OmInstance(mDB: Database, mId: String) {
   def getDisplayString: String = {
     val result: String = mId + ":" + (if (mLocal) " (local)" else "") + " " + getAddress + ", created on " + getCreationDateFormatted
     result
+  }
+
+  def update(newAddress: String): Unit = {
+    mDB.updateOmInstance(getId, newAddress, getEntityId)
   }
 
   def delete() = mDB.deleteOmInstance(mId)

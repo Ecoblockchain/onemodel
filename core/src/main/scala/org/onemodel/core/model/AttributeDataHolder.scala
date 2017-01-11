@@ -39,7 +39,7 @@ class RelationToEntityDataHolder(relTypeIdIn: Long,
                                  var entityId2: Long,
                                  var isRemote: Boolean,
                                  var remoteInstanceId: String)
-    extends AttributeDataHolderWithVODates(relTypeIdIn, validOnDateIn, observationDateIn)
+  extends AttributeDataHolderWithVODates(relTypeIdIn, validOnDateIn, observationDateIn)
 
 class GroupDataHolder(var id:Long,
                       var name: String,

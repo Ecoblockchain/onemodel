@@ -12,7 +12,6 @@
 */
 package org.onemodel.core.model
 
-import org.onemodel.core.model.Database
 import org.onemodel.core.{OmException, Util}
 
 /** Represents one quantity object in the system (usually [always, as of 9/2002] used as an attribute on a Entity).
@@ -21,7 +20,7 @@ import org.onemodel.core.{OmException, Util}
   * create a new object.
   */
 class QuantityAttribute(mDB: Database, mId: Long) extends AttributeWithValidAndObservedDates(mDB, mId) {
-  // (See comment at similar location in BooleanAttribute.)
+  // (See comment in similar spot in BooleanAttribute for why not checking for exists, if mDB.isRemote.)
   if (!mDB.isRemote && !mDB.quantityAttributeKeyExists(mId)) {
     throw new Exception("Key " + mId + Util.DOES_NOT_EXIST)
   }

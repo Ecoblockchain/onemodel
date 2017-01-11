@@ -12,12 +12,11 @@
 */
 package org.onemodel.core.model
 
-import org.onemodel.core.model.Database
 import org.onemodel.core.{Util, Color, OmException}
 
-/** See comments on similar methods in RelationToEntity. */
-class Group(mDB: Database, mId: Long) {
-  // (See comment at similar location in BooleanAttribute.)
+/** See comments on similar methods in RelationToEntity (or maybe its subclasses). */
+class Group(val mDB: Database, mId: Long) {
+  // (See comment in similar spot in BooleanAttribute for why not checking for exists, if mDB.isRemote.)
   if (!mDB.isRemote && !mDB.groupKeyExists(mId: Long)) {
     throw new Exception("Key " + mId + Util.DOES_NOT_EXIST)
   }
@@ -29,6 +28,7 @@ class Group(mDB: Database, mId: Long) {
     mInsertionDate = insertionDateIn
     mMixedClassesAllowed = mixedClassesAllowedIn
     mNewEntriesStickToTop = newEntriesStickToTopIn
+    mAlreadyReadData = true
   }
 
   def readDataFromDB() {
@@ -97,8 +97,8 @@ class Group(mDB: Database, mId: Long) {
     mDB.getGroupEntryObjects(mId, startingIndexIn, maxValsIn)
   }
 
-  def addEntity(inEntityId: Long) {
-    mDB.addEntityToGroup(mId, inEntityId)
+  def addEntity(inEntityId: Long, sortingIndexIn: Option[Long] = None, callerManagesTransactionsIn: Boolean = false) {
+    mDB.addEntityToGroup(getId, inEntityId, sortingIndexIn, callerManagesTransactionsIn)
   }
 
   def getId: Long = mId
@@ -186,6 +186,62 @@ class Group(mDB: Database, mId: Long) {
 
   def getHighestSortingIndex: Long = {
     mDB.getHighestSortingIndexForGroup(getId)
+  }
+
+  def getContainingRelationsToGroup(startingIndexIn: Long, maxValsIn: Option[Long] = None): java.util.ArrayList[RelationToGroup] = {
+    mDB.getRelationsToGroupContainingThisGroup(getId, startingIndexIn, maxValsIn)
+  }
+
+  def getCountOfEntitiesContainingGroup: (Long, Long) = {
+    mDB.getCountOfEntitiesContainingGroup(getId)
+  }
+
+  def getEntitiesContainingGroup(startingIndexIn: Long, maxValsIn: Option[Long] = None): java.util.ArrayList[(Long, Entity)] = {
+    mDB.getEntitiesContainingGroup(getId, startingIndexIn, maxValsIn)
+  }
+
+  def findUnusedSortingIndex(startingWithIn: Option[Long] = None): Long = {
+    mDB.findUnusedGroupSortingIndex(getId, startingWithIn)
+  }
+
+  def getGroupsContainingEntitysGroupsIds(limitIn: Option[Long] = Some(5)): List[Array[Option[Any]]] = {
+    mDB.getGroupsContainingEntitysGroupsIds(getId, limitIn)
+  }
+
+  def isEntityInGroup(entityIdIn: Long): Boolean = {
+    mDB.isEntityInGroup(getId, entityIdIn)
+  }
+
+  def getAdjacentGroupEntriesSortingIndexes(sortingIndexIn: Long, limitIn: Option[Long] = None, forwardNotBackIn: Boolean): List[Array[Option[Any]]] = {
+    mDB.getAdjacentGroupEntriesSortingIndexes(getId, sortingIndexIn, limitIn, forwardNotBackIn)
+  }
+
+  def getNearestGroupEntrysSortingIndex(startingPointSortingIndexIn: Long, forwardNotBackIn: Boolean): Option[Long] = {
+    mDB.getNearestGroupEntrysSortingIndex(getId, startingPointSortingIndexIn, forwardNotBackIn)
+  }
+
+  def getEntrySortingIndex(entityIdIn: Long): Long = {
+    mDB.getGroupEntrySortingIndex(getId, entityIdIn)
+  }
+
+  def isGroupEntrySortingIndexInUse(sortingIndexIn: Long): Boolean = {
+    mDB.isGroupEntrySortingIndexInUse(getId, sortingIndexIn)
+  }
+
+  def updateSortingIndex(entityIdIn: Long, sortingIndexIn: Long): Unit = {
+    mDB.updateSortingIndexInAGroup(getId, entityIdIn, sortingIndexIn)
+  }
+
+  def renumberSortingIndexes(callerManagesTransactionsIn: Boolean = false): Unit = {
+    mDB.renumberSortingIndexes(getId, callerManagesTransactionsIn, isEntityAttrsNotGroupEntries = false)
+  }
+
+  def moveEntityFromGroupToLocalEntity(toEntityIdIn: Long, moveEntityIdIn: Long, sortingIndexIn: Long): Unit = {
+    mDB.moveEntityFromGroupToLocalEntity(getId, toEntityIdIn, moveEntityIdIn, sortingIndexIn)
+  }
+
+  def moveEntityToDifferentGroup(toGroupIdIn: Long, moveEntityIdIn: Long, sortingIndexIn: Long): Unit = {
+    mDB.moveLocalEntityFromGroupToGroup(getId, toGroupIdIn, moveEntityIdIn, sortingIndexIn)
   }
 
   private var mAlreadyReadData: Boolean = false

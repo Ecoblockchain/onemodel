@@ -12,9 +12,6 @@
 */
 package org.onemodel.core.model
 
-import org.onemodel.core.model.Database
-
-
 object Attribute {
   // unlike in Controller, these are intentionally a little different, for displaying also the day of the week:
   val DATEFORMAT = new java.text.SimpleDateFormat("EEE yyyy-MM-dd HH:mm:ss:SSS zzz")
@@ -45,9 +42,9 @@ object Attribute {
  * Represents one attribute object in the system (usually [always, as of 1/2004] used as an attribute on a Entity).
  * Originally created as a place to put common stuff between Relation/QuantityAttribute/TextAttribute.
  */
-abstract class Attribute(mDB: Database, mId: Long) {
+abstract class Attribute(val mDB: Database, mId: Long) {
   // idea: somehow use scala features better to make it cleaner, so we don't need these extra 2 vars, because they are
-  // used in 1-2 instances, and ignored in the rest.  One thing is that RelationToEntity and RelationToGroup are Attributes. Should they be?
+  // used in 1-2 instances, and ignored in the rest.  One thing is that RelationTo[Local|Remote]Entity and RelationToGroup are Attributes. Should they be?
   def getDisplayString(inLengthLimit: Int, parentEntity: Option[Entity], inRTId: Option[RelationType], simplify: Boolean = false): String
 
   protected def readDataFromDB()
@@ -82,10 +79,6 @@ abstract class Attribute(mDB: Database, mId: Long) {
     if (!mAlreadyReadData) readDataFromDB()
     mSortingIndex
   }
-
-  def isRemote: Boolean = mDB.isRemote
-
-  def omInstanceKey: String = mDB.getId
 
   // idea: make the scope definitions (by whatever name: "private[onemodel] ") sensible and uniform
   private[onemodel] def getParentId: Long = {

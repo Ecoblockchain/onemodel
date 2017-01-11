@@ -13,7 +13,7 @@ package org.onemodel.core.controllers
 import org.onemodel.core._
 import org.onemodel.core.model._
 
-class MainMenu(val ui: TextUI, val db: PostgreSQLDatabase, val controller: Controller)  {
+class MainMenu(val ui: TextUI, val db: Database, val controller: Controller)  {
   /** See caller in start() for description of the 2nd parameter. */
   // Removed next line @tailrec because 1) it gets errors about "recursive call not in tail position" (which could be fixed by removing the last call to itself,
   // but for the next reason), and 2) it means the user can't press ESC to go "back" to previously viewed entities.
@@ -34,11 +34,12 @@ class MainMenu(val ui: TextUI, val db: PostgreSQLDatabase, val controller: Contr
           val answer = response.get
           // None means user hit ESC (or 0, though not shown) to get out
           answer match {
-            case 1 => controller.showInEntityMenuThenMainMenu(controller.askForClassInfoAndNameAndCreateEntity())
+            case 1 =>
+              showInEntityMenuThenMainMenu(controller.askForClassInfoAndNameAndCreateEntity(db))
             case 2 =>
-              val selection: Option[(IdWrapper, _, _)] = controller.chooseOrCreateObject(None, None, None, Util.ENTITY_TYPE)
+              val selection: Option[(IdWrapper, _, _)] = controller.chooseOrCreateObject(db, None, None, None, Util.ENTITY_TYPE)
               if (selection.isDefined) {
-                controller.showInEntityMenuThenMainMenu(Some(new Entity(db, selection.get._1.getId)))
+                showInEntityMenuThenMainMenu(Some(new Entity(db, selection.get._1.getId)))
               }
             case _ => ui.displayText("unexpected: " + answer)
           }
@@ -73,38 +74,38 @@ class MainMenu(val ui: TextUI, val db: PostgreSQLDatabase, val controller: Contr
           val answer = response.get
           answer match {
             case 1 =>
-              controller.showInEntityMenuThenMainMenu(controller.askForClassInfoAndNameAndCreateEntity())
+              showInEntityMenuThenMainMenu(controller.askForClassInfoAndNameAndCreateEntity(db))
             case 2 =>
-              controller.showInEntityMenuThenMainMenu(controller.askForNameAndWriteEntity(Util.RELATION_TYPE_TYPE))
+              showInEntityMenuThenMainMenu(controller.askForNameAndWriteEntity(db, Util.RELATION_TYPE_TYPE))
             case 3 =>
-              new EntityMenu(ui, db, controller).entityMenu(new Entity(db, db.getPreferencesContainerId))
+              new EntityMenu(ui, controller).entityMenu(new Entity(db, db.getPreferencesContainerId))
               controller.refreshPublicPrivateStatusPreference()
               controller.refreshDefaultDisplayEntityId()
             case 4 =>
-              val rtId: Option[(IdWrapper, _, _)] = controller.chooseOrCreateObject(None, None, None, Util.RELATION_TYPE_TYPE)
+              val rtId: Option[(IdWrapper, _, _)] = controller.chooseOrCreateObject(db, None, None, None, Util.RELATION_TYPE_TYPE)
               if (rtId.isDefined) {
-                controller.showInEntityMenuThenMainMenu(Some(new RelationType(db, rtId.get._1.getId)))
+                showInEntityMenuThenMainMenu(Some(new RelationType(db, rtId.get._1.getId)))
               }
             case 5 =>
               val subEntitySelected: Option[Entity] = controller.goToEntityOrItsSoleGroupsMenu(entity)._1
               if (subEntitySelected.isDefined) mainMenu(subEntitySelected)
             case 6 =>
-              val selection: Option[(IdWrapper, _, _)] = controller.chooseOrCreateObject(None, None, None, Util.ENTITY_TYPE)
+              val selection: Option[(IdWrapper, _, _)] = controller.chooseOrCreateObject(db, None, None, None, Util.ENTITY_TYPE)
               if (selection.isDefined) {
-                controller.showInEntityMenuThenMainMenu(Some(new Entity(db, selection.get._1.getId)))
+                showInEntityMenuThenMainMenu(Some(new Entity(db, selection.get._1.getId)))
               }
             case 7 =>
-              val classId: Option[(IdWrapper, _, _)] = controller.chooseOrCreateObject(None, None, None, Util.ENTITY_CLASS_TYPE)
+              val classId: Option[(IdWrapper, _, _)] = controller.chooseOrCreateObject(db, None, None, None, Util.ENTITY_CLASS_TYPE)
               // (compare this to showInEntityMenuThenMainMenu)
               if (classId.isDefined) {
-                new ClassMenu(ui, db, controller).classMenu(new EntityClass(db, classId.get._1.getId))
+                new ClassMenu(ui, controller).classMenu(new EntityClass(db, classId.get._1.getId))
                 mainMenu(Some(entity))
               }
             case 8 =>
-              val omInstanceKey: Option[(_, _, String)] = controller.chooseOrCreateObject(None, None, None, Util.OM_INSTANCE_TYPE)
+              val omInstanceKey: Option[(_, _, String)] = controller.chooseOrCreateObject(db, None, None, None, Util.OM_INSTANCE_TYPE)
               // (compare this to showInEntityMenuThenMainMenu)
               if (omInstanceKey.isDefined) {
-                new OmInstanceMenu(ui, db, controller).omInstanceMenu(new OmInstance(db, omInstanceKey.get._3))
+                new OmInstanceMenu(ui, controller).omInstanceMenu(new OmInstance(db, omInstanceKey.get._3))
                 mainMenu(Some(entity))
               }
             case _: Int =>
@@ -114,12 +115,21 @@ class MainMenu(val ui: TextUI, val db: PostgreSQLDatabase, val controller: Contr
           mainMenu(Some(entity))
         }
       }
-    }
-    catch {
+    } catch {
       case e: Exception =>
-        Util.handleException(e, controller.ui, controller.db)
+        Util.handleException(e, ui, db)
         val ans = ui.askYesNoQuestion("Go back to what you were doing (vs. going out)?",Some("y"))
         if (ans.isDefined && ans.get) mainMenu(entityIn, goDirectlyToChoice)
+    }
+  }
+
+  def showInEntityMenuThenMainMenu(entityIn: Option[Entity]) {
+    if (entityIn.isDefined) {
+      //idea: is there a better way to do this, maybe have a single entityMenu for the class instead of new.. each time?
+      new EntityMenu(ui, controller).entityMenu(entityIn.get)
+      // doing mainmenu right after entityMenu because that's where user would
+      // naturally go after they exit the entityMenu.
+      new MainMenu(ui, db, controller).mainMenu(entityIn)
     }
   }
 

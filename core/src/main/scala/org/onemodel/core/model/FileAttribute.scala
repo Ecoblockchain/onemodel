@@ -12,8 +12,6 @@
 */
 package org.onemodel.core.model
 
-import org.onemodel.core.model.Database
-
 import scala.annotation.tailrec
 import java.io.{File, FileOutputStream}
 import org.apache.commons.io.FilenameUtils
@@ -83,7 +81,7 @@ object FileAttribute {
   * REMOVED.)
   */
 class FileAttribute(mDB: Database, mId: Long) extends Attribute(mDB, mId) {
-  // (See comment at similar location in BooleanAttribute.)
+  // (See comment in similar spot in BooleanAttribute for why not checking for exists, if mDB.isRemote.)
   if (!mDB.isRemote && !mDB.fileAttributeKeyExists(mId)) {
     throw new Exception("Key " + mId + Util.DOES_NOT_EXIST)
   }

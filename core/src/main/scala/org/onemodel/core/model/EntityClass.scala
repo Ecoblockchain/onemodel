@@ -18,11 +18,11 @@ import org.onemodel.core.{OmException, Util}
 object EntityClass {
   def nameLength(inDB: Database): Int = Database.classNameLength
 
-  def isDuplicate(inDB: PostgreSQLDatabase, inName: String, inSelfIdToIgnore: Option[Long] = None): Boolean = inDB.isDuplicateClass(inName, inSelfIdToIgnore)
+  def isDuplicate(inDB: Database, inName: String, inSelfIdToIgnore: Option[Long] = None): Boolean = inDB.isDuplicateClassName(inName, inSelfIdToIgnore)
 }
 
-class EntityClass(mDB: Database, mId: Long) {
-  // (See comment at similar location in BooleanAttribute.)
+class EntityClass(val mDB: Database, mId: Long) {
+  // (See comment in similar spot in BooleanAttribute for why not checking for exists, if mDB.isRemote.)
   if (!mDB.isRemote && !mDB.classKeyExists(mId)) {
     throw new Exception("Key " + mId + Util.DOES_NOT_EXIST)
   }
@@ -48,6 +48,7 @@ class EntityClass(mDB: Database, mId: Long) {
     if (!mAlreadyReadData) readDataFromDB()
     mTemplateEntityId
   }
+
 
   def getCreateDefaultAttributes: Option[Boolean] = {
     if (!mAlreadyReadData) readDataFromDB()
@@ -87,6 +88,14 @@ class EntityClass(mDB: Database, mId: Long) {
         }
     }
     result
+  }
+
+  def updateClassAndTemplateEntityName(nameIn: String): Long = {
+    mDB.updateClassAndTemplateEntityName(this.getId, nameIn)
+  }
+
+  def updateCreateDefaultAttributes(valueIn: Option[Boolean]): Unit = {
+    mDB.updateClassCreateDefaultAttributes(getId, valueIn)
   }
 
   /** Removes this object etc from the system. */

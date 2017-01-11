@@ -12,7 +12,6 @@
 */
 package org.onemodel.core.model
 
-import org.onemodel.core.model.Database
 import org.onemodel.core.{OmException, Util}
 
 /** Represents one String object in the system (usually [always, as of 9/2002] used as an attribute on a Entity).
@@ -21,7 +20,7 @@ import org.onemodel.core.{OmException, Util}
     create a new object.
   */
 class TextAttribute(mDB: Database, mId: Long) extends AttributeWithValidAndObservedDates(mDB, mId) {
-  // (See comment at similar location in BooleanAttribute.)
+  // (See comment in similar spot in BooleanAttribute for why not checking for exists, if mDB.isRemote.)
   if (!mDB.isRemote && !mDB.textAttributeKeyExists(mId)) {
     throw new Exception("Key " + mId + Util.DOES_NOT_EXIST)
   }
@@ -61,7 +60,8 @@ class TextAttribute(mDB: Database, mId: Long) extends AttributeWithValidAndObser
       throw new OmException("No results returned from data request for: " + mId)
     }
     mText = taTypeData(1).get.asInstanceOf[String]
-    super.assignCommonVars(taTypeData(0).get.asInstanceOf[Long], taTypeData(2).get.asInstanceOf[Long], taTypeData(3).asInstanceOf[Option[Long]], taTypeData(4).get.asInstanceOf[Long], taTypeData(5).get.asInstanceOf[Long])
+    super.assignCommonVars(taTypeData(0).get.asInstanceOf[Long], taTypeData(2).get.asInstanceOf[Long], taTypeData(3).asInstanceOf[Option[Long]],
+                           taTypeData(4).get.asInstanceOf[Long], taTypeData(5).get.asInstanceOf[Long])
   }
 
   def update(attrTypeIdIn: Long, textIn: String, validOnDateIn: Option[Long], observationDateIn: Long) {

@@ -12,7 +12,6 @@
 */
 package org.onemodel.core.model
 
-import org.onemodel.core.model.Database
 import org.onemodel.core.{OmException, Util}
 
 /** See TextAttribute etc for some comments.
@@ -20,7 +19,7 @@ import org.onemodel.core.{OmException, Util}
   * not shared (idea: model that better, and in FileAttribute).
   */
 class DateAttribute(mDB: Database, mId: Long) extends Attribute(mDB, mId) {
-  // (See comment at similar location in BooleanAttribute.)
+  // (See comment in similar spot in BooleanAttribute for why not checking for exists, if mDB.isRemote.)
   if (!mDB.isRemote && !mDB.dateAttributeKeyExists(mId)) {
     throw new Exception("Key " + mId + Util.DOES_NOT_EXIST)
   }

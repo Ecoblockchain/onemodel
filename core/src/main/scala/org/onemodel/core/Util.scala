@@ -51,7 +51,7 @@ object Util {
   val FILE_TYPE: String = "FileAttribute"
   //i.e., "relationTypeType", or the thing that we sometimes put in an attribute type parameter, though not exactly an attribute type, which is "RelationType":
   val RELATION_TYPE_TYPE: String = "RelationType"
-  val RELATION_TO_ENTITY_TYPE: String = "RelationToEntity"
+  val RELATION_TO_LOCAL_ENTITY_TYPE: String = "RelationToEntity"
   val RELATION_TO_GROUP_TYPE: String = "RelationToGroup"
   val RELATION_TO_REMOTE_ENTITY_TYPE: String = "RelationToRemoteEntity"
   val GROUP_TYPE: String = "Group"
@@ -253,7 +253,7 @@ object Util {
     stringWriter.toString
   }
 
-  def handleException(e: Throwable, ui: TextUI, db: PostgreSQLDatabase) {
+  def handleException(e: Throwable, ui: TextUI, db: Database) {
     if (e.isInstanceOf[org.postgresql.util.PSQLException] || e.isInstanceOf[OmDatabaseException] ||
         throwableToString(e).contains("ERROR: current transaction is aborted, commands ignored until end of transaction block"))
     {
@@ -625,7 +625,7 @@ object Util {
   }
 
   /** Returns None if user wants to cancel. */
-  def askForTextAttributeText(inDH: TextAttributeDataHolder, inEditing: Boolean, ui: TextUI): Option[TextAttributeDataHolder] = {
+  def askForTextAttributeText(ignore: Database, inDH: TextAttributeDataHolder, inEditing: Boolean, ui: TextUI): Option[TextAttributeDataHolder] = {
     val outDH = inDH.asInstanceOf[TextAttributeDataHolder]
     val defaultValue: Option[String] = if (inEditing) Some(inDH.text) else None
     val ans = ui.askForString(Some(Array("Type or paste a single-line attribute value, then press Enter; ESC to cancel." +
@@ -645,7 +645,7 @@ object Util {
   /** Returns None if user wants to cancel.
     * Idea: consider combining somehow with method askForDate_generic or note here why not, perhaps.
     */
-  def askForDateAttributeValue(inDH: DateAttributeDataHolder, inEditing: Boolean, ui: TextUI): Option[DateAttributeDataHolder] = {
+  def askForDateAttributeValue(ignore: Database, inDH: DateAttributeDataHolder, inEditing: Boolean, ui: TextUI): Option[DateAttributeDataHolder] = {
     val outDH = inDH.asInstanceOf[DateAttributeDataHolder]
 
     // make the DateFormat omit trailing zeros, for editing convenience (to not have to backspace thru the irrelevant parts if not specified):
@@ -684,7 +684,7 @@ object Util {
   }
 
   /** Returns None if user wants to cancel. */
-  def askForBooleanAttributeValue(inDH: BooleanAttributeDataHolder, inEditing: Boolean, ui: TextUI): Option[BooleanAttributeDataHolder] = {
+  def askForBooleanAttributeValue(ignore: Database, inDH: BooleanAttributeDataHolder, inEditing: Boolean, ui: TextUI): Option[BooleanAttributeDataHolder] = {
     val outDH = inDH.asInstanceOf[BooleanAttributeDataHolder]
     val ans = ui.askYesNoQuestion("Set the new value to true now? ('y' if so, 'n' for false)", if (inEditing && inDH.boolean) Some("y") else Some("n"))
     if (ans.isEmpty) None
@@ -695,7 +695,7 @@ object Util {
   }
 
   /** Returns None if user wants to cancel. */
-  def askForFileAttributeInfo(inDH: FileAttributeDataHolder, inEditing: Boolean, ui: TextUI): Option[FileAttributeDataHolder] = {
+  def askForFileAttributeInfo(ignore: Database, inDH: FileAttributeDataHolder, inEditing: Boolean, ui: TextUI): Option[FileAttributeDataHolder] = {
     val outDH = inDH.asInstanceOf[FileAttributeDataHolder]
     var path: Option[String] = None
     if (!inEditing) {
@@ -731,13 +731,4 @@ object Util {
     }
   }
 
-  def currentOrRemoteDb(relationToEntityIn: RelationToEntity, currentDb: Database): Database = {
-    // Can't use ".isRemote" here because a RelationToRemoteEntity is stored locally (so would say false),
-    // but refers to an entity which is remote (so we want the next line to be true in that case):
-    if (relationToEntityIn.isInstanceOf[RelationToRemoteEntity]) {
-      new RestDatabase(relationToEntityIn.asInstanceOf[RelationToRemoteEntity].getRemoteAddress)
-    } else {
-      currentDb
-    }
-  }
 }

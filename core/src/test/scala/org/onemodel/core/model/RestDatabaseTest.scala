@@ -9,14 +9,20 @@
 */
 package org.onemodel.core.model
 
+// Comment out the next line (i.e., put "//" in front of the "/*") to make these tests run.  They are not currently run automatically
+// because nothing is in place to start the required web server automatically.  To start it manually, install sbt, then cd into
+// the "web" module and run "sbt", then inside sbt type the command "~ run".  For details, see the URLs in RestDatabase mentioning playframework.com, and the
+// call to "new RestDatabase" below.
+//%% /*
+
 import java.io.{File, FileOutputStream}
 import java.util
 
-import org.onemodel.core.{OmException, Util}
+import org.onemodel.core._
 import org.scalatest.mockito.MockitoSugar
 import org.scalatest.{Args, FlatSpec, Status}
-
 import scala.collection._
+import scala.collection.JavaConversions._
 
 class RestDatabaseTest extends FlatSpec with MockitoSugar {
   private val mPG: PostgreSQLDatabase = new PostgreSQLDatabase(Database.TEST_USER, Database.TEST_USER)
@@ -32,7 +38,7 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     val remote = mRD.isRemote
     assert(remote)
 
-    val id = mRD.getId
+    val id = mRD.id
     assert(id.length > 30)
 
     mPG.setUserPreference_EntityId(Util.DEFAULT_ENTITY_PREFERENCE, mPG.getSystemEntityId)
@@ -52,9 +58,13 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     assert(relationTypes.get(0) == relTypeId)
     assert(mRD.findRelationType(relationTypeName, Some(1)).size == 1)
 
-    val (groupId, relationToGroup) = DatabaseTestUtils.createAndAddTestRelationToGroup_ToEntity(mPG, entityId0, relTypeId, "getGroupSize-testGrp")
-    val groupCount = mRD.getRelationToGroupCount(entityId0)
-    assert(groupCount == 1)
+    val grpCount = mRD.getGroupCount
+    val grpName = "getGroupSize-testGrp"
+    val (groupId, relationToGroup) = DatabaseTestUtils.createAndAddTestRelationToGroup_ToEntity(mPG, entityId0, relTypeId, grpName)
+    val grpCount2 = mRD.getGroupCount
+    assert(grpCount2 == grpCount + 1)
+    val rtgCount = mRD.getRelationToGroupCount(entityId0)
+    assert(rtgCount == 1)
     assert(mRD.getGroupSize(groupId) == 0)
     val group = new Group(mPG, groupId)
     group.addEntity(entityId0)
@@ -83,24 +93,52 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     val count2 = mRD.getCountOfEntitiesContainingGroup(groupId)
     assert(count2._1 == 2)
 
-    entity0.addHASRelationToEntity(entityId1, None, 0)
-    val count3: (Long, Long) = mRD.getCountOfEntitiesContainingEntity(entityId1)
+    entity0.addHASRelationToLocalEntity(entityId1, None, 0)
+    val count3: (Long, Long) = mRD.getCountOfLocalEntitiesContainingLocalEntity(entityId1)
     assert(count3._1 == 1 && count3._2 == 0)
+
+    def foundInResults(resultsIn: util.ArrayList[Group], idIn: Long): Boolean = {
+      var found = false
+      for (group: Group <- resultsIn) {
+        if (group.getId == idIn) {
+          found = true
+        }
+      }
+      found
+    }
+    val groupsMatching: util.ArrayList[Group] = mRD.getMatchingGroups(0, None, None, grpName)
+    assert(groupsMatching.size >= 1)
+    assert(foundInResults(groupsMatching, groupId))
+    val groupsMatching2 = mRD.getMatchingGroups(0, Some(2), None, grpName)
+    assert(groupsMatching2.size == 2)
+    val groupsMatching3 = mRD.getMatchingGroups(0, None, Some(groupId), grpName)
+    assert(! foundInResults(groupsMatching3, groupId))
+
+    val groups = mRD.getGroups(0, None)
+    assert(groups.size > 0)
+    val groups2 = mRD.getGroups(0, None, Some(groupId))
+    assert(groups2.size == groups.size - 1)
+    val groups3 = mRD.getGroups(0, Some(1))
+    assert(groups3.size == 1)
   }
 
   "SortingIndex and counting methods etc" should "work" in {
     val namePrefix = "test: findUnusedGroupSortingIndex"
-    val entityCount = mRD.getEntitiesOnlyCount()
+    val entityOnlyCount = mRD.getEntitiesOnlyCount()
+    assert(mRD.getEntitiesOnly(0).size == entityOnlyCount)
+    val entityCount = mRD.getEntityCount
     val entityId0 = mPG.createEntity(namePrefix + "-e0")
+    assert(mRD.getEntityCount == entityCount + 1)
     val relTypeId: Long = mPG.createRelationType("contains", "", RelationType.BIDIRECTIONAL)
-    val (groupId, relationToGroup) = DatabaseTestUtils.createAndAddTestRelationToGroup_ToEntity(mPG, entityId0, relTypeId, "findUnusedGroupSortingIndex-testGrp")
+    val (groupId, relationToGroup) = DatabaseTestUtils.createAndAddTestRelationToGroup_ToEntity(mPG, entityId0, relTypeId,
+                                                                                                "findUnusedGroupSortingIndex-testGrp")
     assert(mRD.relationToGroupKeysExistAndMatch(relationToGroup.getId, entityId0, relTypeId, groupId))
     assert(mRD.groupKeyExists(groupId))
     val group = new Group(mPG, groupId)
     val entityId1 = mPG.createEntity(namePrefix + "-e1")
     group.addEntity(entityId1)
     val highestUsedIndex = mRD.getHighestSortingIndexForGroup(groupId)
-    val onlyUsedIndexInGroup= mRD.getGroupSortingIndex(groupId, entityId1)
+    val onlyUsedIndexInGroup = mRD.getGroupEntrySortingIndex(groupId, entityId1)
     assert(onlyUsedIndexInGroup == highestUsedIndex)
     val groupUnusedIndex = mRD.findUnusedGroupSortingIndex(groupId, Some(-33))
     assert(groupUnusedIndex != highestUsedIndex)
@@ -110,7 +148,7 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     val nearestEntrysIndex: Option[Long] = mRD.getNearestGroupEntrysSortingIndex(groupId, onlyUsedIndexInGroup, forwardNotBackIn = true)
     assert(nearestEntrysIndex.isEmpty)
     val entityCountAfter = mRD.getEntitiesOnlyCount()
-    assert(entityCountAfter == (entityCount + 2))
+    assert(entityCountAfter == (entityOnlyCount + 2))
 
     val oneUsedIndexInGroup: Long = onlyUsedIndexInGroup
     //noinspection SpellCheckingInspection
@@ -132,7 +170,7 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
 
     val countOfGroupsContaining: Long = mRD.getCountOfGroupsContainingEntity(entityId1)
     assert(countOfGroupsContaining == 1)
-    assert(mRD.getContainingRelationToGroups(entityId1, 0).size == 1)
+    assert(mRD.getContainingRelationsToGroup(entityId1, 0).size == 1)
     val containingGroupsIds: util.ArrayList[Long] = mRD.getContainingGroupsIds(entityId1)
     assert(containingGroupsIds.size == 1)
     assert(containingGroupsIds.get(0) == groupId)
@@ -150,7 +188,7 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     val nearestAttributesIndex = mRD.getNearestAttributeEntrysSortingIndex(entityId0, attrIndex, forwardNotBackIn = true)
     assert(nearestAttributesIndex.isEmpty)
 
-    val containedEntityIds = mRD.findContainedEntityIds(new mutable.TreeSet[Long](), entityId0, namePrefix)
+    val containedEntityIds = mRD.findContainedLocalEntityIds(new mutable.TreeSet[Long](), entityId0, namePrefix)
     assert(containedEntityIds.size == 3)
 
     val foundEntityIdsByName = mRD.findAllEntityIdsByName(testName2.toLowerCase)
@@ -168,14 +206,14 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     assert(mRD.isDuplicateEntityName(name))
     assert(!mRD.isDuplicateEntityName(name, Some(entityId0)))
     val entity0 = new Entity(mPG, entityId0)
-    val (e1, _): (Entity, RelationToEntity) = entity0.createEntityAndAddHASRelationToIt("test: getAttributeCount-e1", 0, None)
-    entity0.createEntityAndAddHASRelationToIt("test: getAttributeCount-e2", 0, None)
+    val (e1, _): (Entity, RelationToLocalEntity) = entity0.createEntityAndAddHASLocalRelationToIt("test: getAttributeCount-e1", 0, None)
+    entity0.createEntityAndAddHASLocalRelationToIt("test: getAttributeCount-e2", 0, None)
 
-    assert(mRD.getRelationToEntityCount(entityId0, includeArchivedEntitiesIn = false) == 2)
-    assert(mRD.getRelationToEntityCount(entityId0, includeArchivedEntitiesIn = true) == 2)
+    assert(mRD.getRelationToLocalEntityCount(entityId0, includeArchivedEntitiesIn = false) == 2)
+    assert(mRD.getRelationToLocalEntityCount(entityId0, includeArchivedEntitiesIn = true) == 2)
     e1.archive()
-    assert(mRD.getRelationToEntityCount(entityId0, includeArchivedEntitiesIn = false) == 1)
-    assert(mRD.getRelationToEntityCount(entityId0, includeArchivedEntitiesIn = true) == 2)
+    assert(mRD.getRelationToLocalEntityCount(entityId0, includeArchivedEntitiesIn = false) == 1)
+    assert(mRD.getRelationToLocalEntityCount(entityId0, includeArchivedEntitiesIn = true) == 2)
 
     val countWithArchived = mRD.getAttributeCount(entityId0, includeArchivedEntitiesIn = true)
     val countWithoutArchived = mRD.getAttributeCount(entityId0, includeArchivedEntitiesIn = false)
@@ -186,6 +224,8 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     val classCount1 = mRD.getClassCount()
     val className = "test classes in RDT-" + Math.random()
     val (classId1, entityId1): (Long, Long) = mPG.createClassAndItsTemplateEntity(className)
+    assert(mRD.isDuplicateClassName(className))
+    assert(!mRD.isDuplicateClassName(className + Math.random()))
     assert(mRD.getClassName(classId1).get == className)
     mPG.updateClassName(classId1, "")
     val blankName = mRD.getClassName(classId1)
@@ -202,13 +242,13 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     assert(mRD.classKeyExists(classId1))
 
     mPG.updateClassCreateDefaultAttributes(classId1, Some(false))
-    val should1: Option[Boolean] = mRD.getShouldCreateDefaultAttributes(classId1)
+    val should1: Option[Boolean] = new EntityClass(mRD, classId1).getCreateDefaultAttributes
     assert(!should1.get)
     mPG.updateClassCreateDefaultAttributes(classId1, None)
-    val should2: Option[Boolean] = mRD.getShouldCreateDefaultAttributes(classId1)
+    val should2: Option[Boolean] = new EntityClass(mRD, classId1).getCreateDefaultAttributes
     assert(should2.isEmpty)
     mPG.updateClassCreateDefaultAttributes(classId1, Some(true))
-    val should3: Option[Boolean] = mRD.getShouldCreateDefaultAttributes(classId1)
+    val should3: Option[Boolean] = new EntityClass(mRD, classId1).getCreateDefaultAttributes
     assert(should3.get)
 
     val classData: Array[Option[Any]] = mRD.getClassData(classId1)
@@ -220,11 +260,16 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     val classData2: Array[Option[Any]] = mRD.getClassData(classId1)
     assert(classData2(2).isEmpty)
 
-    // (hopefully something unused:)
+    // (hopefully this id is unused:)
     val nonexistentId: Long = Database.maxIdValue
     require(!mPG.classKeyExists(nonexistentId))
     val classDataForBadId: Array[Option[Any]] = mRD.getClassData(nonexistentId)
     assert(classDataForBadId.length == 0)
+
+    val classes = mRD.getClasses(0, None)
+    assert(classes.size > 0)
+    val classes2 = mRD.getClasses(0, Some(1))
+    assert(classes2.size == 1)
   }
 
   "other exists tests" should "work" in {
@@ -242,19 +287,21 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     assert(!mRD.entityKeyExists(entityId0, includeArchived = false))
   }
 
-//  "setIncludeArchivedEntities and check" should "work" in {
-    // idea: can put these back when (some decisions and) code are in place for *write* access (at least for this non-persistent variable).
-    // Maybe it should be stateless, ie, a parm on every request, instead, or just not provide this via REST?:
-//    mRD.setIncludeArchivedEntities(in = true)
-//    assert(mRD.includeArchivedEntities)
-//    mRD.setIncludeArchivedEntities(in = false)
-//    assert(!mRD.includeArchivedEntities)
-//    mRD.setIncludeArchivedEntities(in = true)
-//    assert(mRD.includeArchivedEntities)
-//  }
+  //  "setIncludeArchivedEntities and check" should "work" in {
+  // idea: can put these back when (some decisions and) code are in place for *write* access (at least for this non-persistent variable).
+  // Maybe it should be stateless, ie, a parm on every request, instead, or just not provide this via REST?:
+  //    mRD.setIncludeArchivedEntities(in = true)
+  //    assert(mRD.includeArchivedEntities)
+  //    mRD.setIncludeArchivedEntities(in = false)
+  //    assert(!mRD.includeArchivedEntities)
+  //    mRD.setIncludeArchivedEntities(in = true)
+  //    assert(mRD.includeArchivedEntities)
+  //  }
 
   "getRelationTypeData and similar" should "work" in {
+    val rtCount = mRD.getRelationTypeCount
     val relTypeId: Long = mPG.createRelationType("contains", "", RelationType.UNIDIRECTIONAL)
+    assert(mRD.getRelationTypeCount == rtCount + 1)
     val relationType = new RelationType(mPG, relTypeId)
     val relationTypeData: Array[Option[Any]] = mRD.getRelationTypeData(relTypeId)
     // (see  Database.getRelationTypeData_resultTypes)
@@ -262,11 +309,18 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     assert(relationTypeData(1).get.asInstanceOf[String] == relationType.getNameInReverseDirection)
     assert(relationTypeData(2).get.asInstanceOf[String] == relationType.getDirectionality)
     assert(relationTypeData.length == 3)
+
+    val relTypes = mRD.getRelationTypes(0, None)
+    assert(relTypes.size > 0)
+    val relTypes2 = mRD.getRelationTypes(0, Some(1))
+    assert(relTypes2.size == 1)
   }
 
   "getOmInstanceData" should "work" in {
+    val omiCount = mRD.getOmInstanceCount
     val uuid = java.util.UUID.randomUUID().toString
     val omInstance: OmInstance = OmInstance.create(mPG, uuid, "test: getRelationTypeData-" + uuid)
+    assert(mRD.getOmInstanceCount == omiCount + 1)
     val omInstanceData = mRD.getOmInstanceData(omInstance.getId)
     assert(mRD.omInstanceKeyExists(omInstance.getId))
     assert(mRD.isDuplicateOmInstanceAddress(omInstance.getAddress))
@@ -400,25 +454,24 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     val testEntity1: Entity = new Entity(mPG, testEntityId1)
     mPG.createEntity("test entity for multiple tests2")
     val relTypeId: Long = mPG.createRelationType("contains", "", RelationType.UNIDIRECTIONAL)
-    val rte = testEntity1.addRelationToEntity(relTypeId, testEntityId1, None)
-    assert(mRD.relationToEntityKeyExists(rte.getId))
-    assert(mRD.relationToEntityKeysExistAndMatch(rte.getId, rte.getAttrTypeId, testEntityId1, testEntityId1))
-    val rteData = mRD.getRelationToEntityData(relTypeId, testEntityId1, testEntityId1)
+    val rte = testEntity1.addRelationToLocalEntity(relTypeId, testEntityId1, None)
+    assert(mRD.relationToLocalEntityKeyExists(rte.getId))
+    assert(mRD.relationToLocalEntityKeysExistAndMatch(rte.getId, rte.getAttrTypeId, testEntityId1, testEntityId1))
+    val rteData = mRD.getRelationToLocalEntityData(relTypeId, testEntityId1, testEntityId1)
     assert(rteData(0).get.asInstanceOf[Long] == rte.getId)
     assert(rteData(1) == rte.getValidOnDate)
     assert(rteData(2).get.asInstanceOf[Long] == rte.getObservationDate)
     assert(rteData(3).get.asInstanceOf[Long] == rte.getSortingIndex)
     assert(rteData.length == 4)
 
-    val entitiesContainingEntity: util.ArrayList[(Long, Entity)] = mRD.getEntitiesContainingEntity(testEntityId1, 0)
+    val entitiesContainingEntity: util.ArrayList[(Long, Entity)] = mRD.getLocalEntitiesContainingLocalEntity(testEntityId1, 0)
     assert(entitiesContainingEntity.size == 1)
     assert(entitiesContainingEntity.get(0)._1 == relTypeId)
     assert(entitiesContainingEntity.get(0)._2.getId == testEntityId1)
 
     val uuid = java.util.UUID.randomUUID().toString
     val omInstance: OmInstance = OmInstance.create(mPG, uuid, "test: relation stuff-" + uuid)
-    val rtre = testEntity1.addRelationToEntity(relTypeId, 0, None, remoteIn = true,
-                                               remoteInstanceIdIn = Some(omInstance.getId)).asInstanceOf[RelationToRemoteEntity]
+    val rtre = testEntity1.addRelationToRemoteEntity(relTypeId, 0, None, remoteInstanceIdIn = omInstance.getId)
     assert(mRD.relationToRemoteEntityKeyExists(rtre.getId))
     assert(mPG.relationToRemoteEntityKeyExists(rtre.getId))
     assert(mPG.attributeKeyExists(rtre.getFormId, rtre.getId))
@@ -438,7 +491,7 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     // as a little elsewhere, this tests the local db rather than the remote, but better than not doing that anywhere:
     val rtreDesc = rtre.getRemoteDescription
     assert(rtreDesc.indexOf("at") > -1)
-    /*val idOfLocalReferenceToRemote = */rtre.getId
+    /*val idOfLocalReferenceToRemote = */ rtre.getId
     rtre.delete()
     assert(intercept[Exception] {
                                   new RelationToRemoteEntity(mPG, rtreData(0).get.asInstanceOf[Long], relTypeId, testEntityId1, omInstance.getId, 0)
@@ -448,6 +501,8 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     val (groupId, rtgId) = mPG.createGroupAndRelationToGroup(testEntityId1, relTypeId, "test relation to group stuff", allowMixedClassesInGroupIn = true,
                                                              Some(System.currentTimeMillis()), 12345L, None)
     val rtg = new RelationToGroup(mPG, rtgId, testEntityId1, relTypeId, groupId)
+    assert(mRD.relationToGroupKeyExists(rtgId))
+    assert(!mRD.relationToGroupKeyExists(123456789))
     val rtgData: Array[Option[Any]] = mRD.getRelationToGroupData(rtgId)
     assert(rtgData(0).get.asInstanceOf[Long] == rtg.getId)
     assert(rtgData(1).get.asInstanceOf[Long] == rtg.getParentId)
@@ -480,7 +535,8 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     assert(groupData(3).get.asInstanceOf[Boolean] == group.getNewEntriesStickToTop)
     assert(groupData.length == 4)
 
-    val entityId0 = mPG.createEntity("test: getGroupDataEtc-0")
+    val entity0Name = "test: getGroupDataEtc-0"
+    val entityId0 = mPG.createEntity(entity0Name)
     val entityId1 = mPG.createEntity("test: getGroupDataEtc-1")
     val entity0 = new Entity(mPG, entityId0)
     val relationTypeId = mPG.findRelationType(Database.theHASrelationTypeName, Some(1)).get(0)
@@ -507,146 +563,186 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     val (relationToGroupId4, _, _, moreRowsAvailable4) = mRD.findRelationToAndGroup_OnEntity(entityId0, Some(Math.random().toString))
     assert(relationToGroupId4.isEmpty)
     assert(!moreRowsAvailable4)
+
+    group.addEntity(entityId1)
+    val descriptions: util.ArrayList[String] = mRD.getContainingRelationToGroupDescriptions(entityId1)
+    assert(descriptions.size == 1)
+    assert(descriptions.get(0).contains(entity0Name))
+    assert(descriptions.get(0).contains(groupName))
+
+    val rtgs: util.ArrayList[RelationToGroup] = mRD.getRelationsToGroupContainingThisGroup(groupId, 0, None)
+    assert(rtgs.size == 1)
+    assert(rtgs.get(0).getId == rtg.getId)
   }
 
-    "entity stuff" should "work" in {
-      val testEntityId1: Long = mPG.createEntity("test entity for multiple tests1")
-      val testEntity1: Entity = new Entity(mPG, testEntityId1)
-      val testEntityId2: Long = mPG.createEntity("test entity for multiple tests2")
-      val qa: QuantityAttribute = testEntity1.addQuantityAttribute(testEntityId2, testEntityId2, 0, None)
-      testEntity1.addDateAttribute(testEntityId2, 0)
-      testEntity1.addBooleanAttribute(testEntityId2, inBoolean = false, None)
-      val ta = testEntity1.addTextAttribute(testEntityId2, "asdf", None)
+  "entity stuff" should "work" in {
+    val startTime = System.currentTimeMillis()
+    val part = "test entity for multiple tests"
+    val entityName1 = part + "1"
+    val testEntityId1: Long = mPG.createEntity(entityName1)
+    val testEntity1: Entity = new Entity(mPG, testEntityId1)
+    val entityName2 = part + "2"
+    val testEntityId2: Long = mPG.createEntity(entityName2)
+    val endTime = System.currentTimeMillis()
+    val journalEntries = mRD.findJournalEntries(startTime, endTime)
+    assert(journalEntries.size >= 2)
+    val qa: QuantityAttribute = testEntity1.addQuantityAttribute(testEntityId2, testEntityId2, 0, None)
+    testEntity1.addDateAttribute(testEntityId2, 0)
+    testEntity1.addBooleanAttribute(testEntityId2, inBoolean = false, None)
+    val ta = testEntity1.addTextAttribute(testEntityId2, "asdf", None)
 
-      assert(intercept[Exception] {
-                                    mRD.getEntityJson_WithOptionalErrHandling(None, testEntityId1)
-                                  }.getMessage.contains("is not public"))
-      mPG.updateEntityOnlyPublicStatus(testEntityId1, Some(true))
-      val entityOverview = mRD.getEntityJson_WithOptionalErrHandling(None, testEntityId1)
-      assert(entityOverview.get.contains("insertionDate"))
-      assert(entityOverview.get.contains("boolean"))
-      assert(entityOverview.get.contains("unitId"))
-      assert(entityOverview.get.contains("text"))
+    assert(intercept[Exception] {
+                                  mRD.getEntityJson_WithOptionalErrHandling(None, testEntityId1)
+                                }.getMessage.contains("is not public"))
+    mPG.updateEntityOnlyPublicStatus(testEntityId1, Some(true))
+    val entityOverview = mRD.getEntityJson_WithOptionalErrHandling(None, testEntityId1)
+    assert(entityOverview.get.contains("insertionDate"))
+    assert(entityOverview.get.contains("boolean"))
+    assert(entityOverview.get.contains("unitId"))
+    assert(entityOverview.get.contains("text"))
 
-      val entityData = mRD.getEntityData(testEntityId1)
-      assert(entityData(0).get.asInstanceOf[String] == testEntity1.getName)
-      assert(entityData(1) == testEntity1.getClassId)
-      assert(entityData(2).get.asInstanceOf[Long] == testEntity1.getInsertionDate)
-      assert(entityData(3) == testEntity1.getPublic)
-      assert(entityData(4).get.asInstanceOf[Boolean] == testEntity1.isArchived)
-      assert(entityData(5).get.asInstanceOf[Boolean] == testEntity1.getNewEntriesStickToTop)
-      assert(entityData.length == 6)
+    val entityData = mRD.getEntityData(testEntityId1)
+    assert(entityData(0).get.asInstanceOf[String] == testEntity1.getName)
+    assert(entityData(1) == testEntity1.getClassId)
+    assert(entityData(2).get.asInstanceOf[Long] == testEntity1.getInsertionDate)
+    assert(entityData(3) == testEntity1.getPublic)
+    assert(entityData(4).get.asInstanceOf[Boolean] == testEntity1.isArchived)
+    assert(entityData(5).get.asInstanceOf[Boolean] == testEntity1.getNewEntriesStickToTop)
+    assert(entityData.length == 6)
 
-      val adjacentAttributesSortingIndexes: List[Array[Option[Any]]] = mRD.getAdjacentAttributesSortingIndexes(testEntityId1, qa.getSortingIndex,
-                                                                                                               None, forwardNotBackIn = true)
-      assert(adjacentAttributesSortingIndexes.size == 3)
-      val adjacentAttributesSortingIndexes2 = mRD.getAdjacentAttributesSortingIndexes(testEntityId1, ta.getSortingIndex, Some(1), forwardNotBackIn = false)
-      assert(adjacentAttributesSortingIndexes2.size == 1)
-    }
+    val adjacentAttributesSortingIndexes: List[Array[Option[Any]]] = mRD.getAdjacentAttributesSortingIndexes(testEntityId1, qa.getSortingIndex,
+                                                                                                             None, forwardNotBackIn = true)
+    assert(adjacentAttributesSortingIndexes.size == 3)
+    val adjacentAttributesSortingIndexes2 = mRD.getAdjacentAttributesSortingIndexes(testEntityId1, ta.getSortingIndex, Some(1), forwardNotBackIn = false)
+    assert(adjacentAttributesSortingIndexes2.size == 1)
 
-    "getSortedAttributes" should "work" in {
-      val testEntityId1: Long = mPG.createEntity("test entity for multiple tests1")
-      val testEntity1: Entity = new Entity(mPG, testEntityId1)
-      val attributeTypeId: Long = mPG.createRelationType("contains", "", RelationType.UNIDIRECTIONAL)
-      val qa: QuantityAttribute = testEntity1.addQuantityAttribute(attributeTypeId, attributeTypeId, 0, None)
-      val da = testEntity1.addDateAttribute(attributeTypeId, 0)
-      val ba = testEntity1.addBooleanAttribute(attributeTypeId, inBoolean = false, None)
-      val x: (File, FileAttribute) = createFileAttribute(testEntity1, attributeTypeId)
-      val fa = x._2
-      val attrText = "asdfjkl;"
-      val ta = testEntity1.addTextAttribute(attributeTypeId, attrText, None)
-      val rte = testEntity1.addRelationToEntity(attributeTypeId, testEntityId1, None)
-      val uuid = java.util.UUID.randomUUID().toString
-      val omInstance: OmInstance = OmInstance.create(mPG, uuid, "test: relation stuff-" + uuid)
-      val rtre = testEntity1.addRelationToEntity(attributeTypeId, 0, None, remoteIn = true, remoteInstanceIdIn = Some(omInstance.getId))
+    val entities = mRD.getEntities(0, None)
+    // 2 entities were created in this test, and at least the system entity always created in a new db:
+    assert(entities.size >= 3)
+    val entities2 = mRD.getEntities(0, Some(1))
+    assert(entities2.size == 1)
 
-      val (groupId, rtgId) = mPG.createGroupAndRelationToGroup(testEntityId1, attributeTypeId, "test relation to group stuff", allowMixedClassesInGroupIn = true, Some(System.currentTimeMillis()), 12345L, None)
-      val rtg = new RelationToGroup(mPG, rtgId, testEntityId1, attributeTypeId, groupId)
-
-      val attributes: (Array[(Long, Attribute)], Int) = mRD.getSortedAttributes(testEntityId1, 0, 0, onlyPublicEntitiesIn = false)
-      assert(attributes._1.length == 8)
-      assert(attributes._2 == 8)
-      mPG.updateEntityOnlyPublicStatus(testEntityId1, Some(false))
-
-      for (tuple <- attributes._1) {
-        val attribute = tuple._2
-        assert(testEntityId1 == attribute.getParentId)
-        assert(attributeTypeId == attribute.getAttrTypeId)
-        attribute match {
-          case a: QuantityAttribute =>
-            assert(qa.getId == a.getId)
-            assert(qa.getFormId == a.getFormId)
-            assert(qa.getSortingIndex == a.getSortingIndex)
-            assert(qa.getValidOnDate == a.getValidOnDate)
-            assert(qa.getObservationDate == a.getObservationDate)
-            assert(qa.getUnitId == a.getUnitId)
-            assert(qa.getNumber == a.getNumber)
-          case a: DateAttribute =>
-            assert(da.getId == a.getId)
-            assert(da.getFormId == a.getFormId)
-            assert(da.getSortingIndex == a.getSortingIndex)
-            assert(da.getDate == a.getDate)
-          case a: BooleanAttribute =>
-            assert(ba.getId == a.getId)
-            assert(ba.getFormId == a.getFormId)
-            assert(ba.getSortingIndex == a.getSortingIndex)
-            assert(ba.getValidOnDate == a.getValidOnDate)
-            assert(ba.getObservationDate == a.getObservationDate)
-            assert(ba.getBoolean == a.getBoolean)
-          case a: FileAttribute =>
-            assert(fa.getId == a.getId)
-            assert(fa.getFormId == a.getFormId)
-            assert(fa.getSortingIndex == a.getSortingIndex)
-            assert(fa.getDescription == a.getDescription)
-            assert(fa.getOriginalFileDate == a.getOriginalFileDate)
-            assert(fa.getStoredDate == a.getStoredDate)
-            assert(fa.getOriginalFilePath == a.getOriginalFilePath)
-            assert(fa.getReadable == a.getReadable)
-            assert(fa.getWritable == a.getWritable)
-            assert(fa.getExecutable == a.getExecutable)
-            assert(fa.getSize == a.getSize)
-            assert(fa.getMd5Hash == a.getMd5Hash)
-          case a: TextAttribute =>
-            assert(ta.getId == a.getId)
-            assert(ta.getFormId == a.getFormId)
-            assert(ta.getSortingIndex == a.getSortingIndex)
-            assert(ta.getValidOnDate == a.getValidOnDate)
-            assert(ta.getObservationDate == a.getObservationDate)
-            assert(ta.getValidOnDate == a.getValidOnDate)
-            assert(ta.getObservationDate == a.getObservationDate)
-            assert(ta.getText == a.getText)
-          case a: RelationToRemoteEntity =>
-            assert(rtre.getId == a.getId)
-            assert(rtre.getFormId == a.getFormId)
-            assert(rtre.getSortingIndex == a.getSortingIndex)
-            assert(rtre.getValidOnDate == a.getValidOnDate)
-            assert(rtre.getObservationDate == a.getObservationDate)
-            assert(rtre.getRelatedId1 == a.getRelatedId1)
-            assert(rtre.getRelatedId2 == a.getRelatedId2)
-            assert(rtre.asInstanceOf[RelationToRemoteEntity].getRemoteInstanceId == a.asInstanceOf[RelationToRemoteEntity].getRemoteInstanceId)
-          case a: RelationToEntity =>
-            // NOTE: this case should come *after* that for RelationToRemoteEntity above, because RelationToRemoteEntity is a subtype of RTE and we don't want
-            // to skip either one.
-            assert(rte.getId == a.getId)
-            assert(rte.getFormId == a.getFormId)
-            assert(rte.getSortingIndex == a.getSortingIndex)
-            assert(rte.getValidOnDate == a.getValidOnDate)
-            assert(rte.getObservationDate == a.getObservationDate)
-            assert(rte.getRelatedId1 == a.getRelatedId1)
-            assert(rte.getRelatedId2 == a.getRelatedId2)
-          case a: RelationToGroup =>
-            assert(rtg.getId == a.getId)
-            assert(rtg.getFormId == a.getFormId)
-            assert(rtg.getSortingIndex == a.getSortingIndex)
-            assert(rtg.getValidOnDate == a.getValidOnDate)
-            assert(rtg.getObservationDate == a.getObservationDate)
-            assert(rtg.getParentId == a.getParentId)
-            assert(rtg.getGroupId == a.getGroupId)
-          case _ => throw new OmException("Unexpected type: " + attribute.getClass.getCanonicalName)
+    def foundInResults(resultsIn: util.ArrayList[Entity], idIn: Long): Boolean = {
+      var found = false
+      for (entity: Entity <- resultsIn) {
+        if (entity.getId == idIn) {
+          found = true
         }
       }
-
-      val attributes2: (Array[(Long, Attribute)], Int) = mRD.getSortedAttributes(testEntityId1, 0, 0, onlyPublicEntitiesIn = true)
-      assert(attributes2._1.length == 7)
+      found
     }
+    val entitiesMatching: util.ArrayList[Entity] = mRD.getMatchingEntities(0, None, None, part)
+    assert(entitiesMatching.size >= 2)
+    assert(foundInResults(entitiesMatching, testEntityId1))
+    val entitiesMatching2 = mRD.getMatchingEntities(0, Some(2), None, part)
+    assert(entitiesMatching2.size == 2)
+    val entitiesMatching3 = mRD.getMatchingEntities(0, None, Some(testEntityId1), part)
+    assert(! foundInResults(entitiesMatching3, testEntityId1))
+  }
+
+  "getSortedAttributes" should "work" in {
+    val testEntityId1: Long = mPG.createEntity("test entity for multiple tests1")
+    val testEntity1: Entity = new Entity(mPG, testEntityId1)
+    val attributeTypeId: Long = mPG.createRelationType("contains", "", RelationType.UNIDIRECTIONAL)
+    val qa: QuantityAttribute = testEntity1.addQuantityAttribute(attributeTypeId, attributeTypeId, 0, None)
+    val da = testEntity1.addDateAttribute(attributeTypeId, 0)
+    val ba = testEntity1.addBooleanAttribute(attributeTypeId, inBoolean = false, None)
+    val x: (File, FileAttribute) = createFileAttribute(testEntity1, attributeTypeId)
+    val fa = x._2
+    val attrText = "asdfjkl;"
+    val ta = testEntity1.addTextAttribute(attributeTypeId, attrText, None)
+    val rte = testEntity1.addRelationToLocalEntity(attributeTypeId, testEntityId1, None)
+    val uuid = java.util.UUID.randomUUID().toString
+    val omInstance: OmInstance = OmInstance.create(mPG, uuid, "test: relation stuff-" + uuid)
+    val rtre = testEntity1.addRelationToRemoteEntity(attributeTypeId, 0, None, remoteInstanceIdIn = omInstance.getId)
+
+    val (groupId, rtgId) = mPG.createGroupAndRelationToGroup(testEntityId1, attributeTypeId, "test relation to group stuff",
+                                                             allowMixedClassesInGroupIn = true, Some(System.currentTimeMillis()), 12345L, None)
+    val rtg = new RelationToGroup(mPG, rtgId, testEntityId1, attributeTypeId, groupId)
+
+    val attributes: (Array[(Long, Attribute)], Int) = mRD.getSortedAttributes(testEntityId1, 0, 0, onlyPublicEntitiesIn = false)
+    assert(attributes._1.length == 8)
+    assert(attributes._2 == 8)
+    mPG.updateEntityOnlyPublicStatus(testEntityId1, Some(false))
+
+    for (tuple <- attributes._1) {
+      val attribute = tuple._2
+      assert(testEntityId1 == attribute.getParentId)
+      assert(attributeTypeId == attribute.getAttrTypeId)
+      attribute match {
+        case a: QuantityAttribute =>
+          assert(qa.getId == a.getId)
+          assert(qa.getFormId == a.getFormId)
+          assert(qa.getSortingIndex == a.getSortingIndex)
+          assert(qa.getValidOnDate == a.getValidOnDate)
+          assert(qa.getObservationDate == a.getObservationDate)
+          assert(qa.getUnitId == a.getUnitId)
+          assert(qa.getNumber == a.getNumber)
+        case a: DateAttribute =>
+          assert(da.getId == a.getId)
+          assert(da.getFormId == a.getFormId)
+          assert(da.getSortingIndex == a.getSortingIndex)
+          assert(da.getDate == a.getDate)
+        case a: BooleanAttribute =>
+          assert(ba.getId == a.getId)
+          assert(ba.getFormId == a.getFormId)
+          assert(ba.getSortingIndex == a.getSortingIndex)
+          assert(ba.getValidOnDate == a.getValidOnDate)
+          assert(ba.getObservationDate == a.getObservationDate)
+          assert(ba.getBoolean == a.getBoolean)
+        case a: FileAttribute =>
+          assert(fa.getId == a.getId)
+          assert(fa.getFormId == a.getFormId)
+          assert(fa.getSortingIndex == a.getSortingIndex)
+          assert(fa.getDescription == a.getDescription)
+          assert(fa.getOriginalFileDate == a.getOriginalFileDate)
+          assert(fa.getStoredDate == a.getStoredDate)
+          assert(fa.getOriginalFilePath == a.getOriginalFilePath)
+          assert(fa.getReadable == a.getReadable)
+          assert(fa.getWritable == a.getWritable)
+          assert(fa.getExecutable == a.getExecutable)
+          assert(fa.getSize == a.getSize)
+          assert(fa.getMd5Hash == a.getMd5Hash)
+        case a: TextAttribute =>
+          assert(ta.getId == a.getId)
+          assert(ta.getFormId == a.getFormId)
+          assert(ta.getSortingIndex == a.getSortingIndex)
+          assert(ta.getValidOnDate == a.getValidOnDate)
+          assert(ta.getObservationDate == a.getObservationDate)
+          assert(ta.getValidOnDate == a.getValidOnDate)
+          assert(ta.getObservationDate == a.getObservationDate)
+          assert(ta.getText == a.getText)
+        case a: RelationToRemoteEntity =>
+          assert(rtre.getId == a.getId)
+          assert(rtre.getFormId == a.getFormId)
+          assert(rtre.getSortingIndex == a.getSortingIndex)
+          assert(rtre.getValidOnDate == a.getValidOnDate)
+          assert(rtre.getObservationDate == a.getObservationDate)
+          assert(rtre.getRelatedId1 == a.getRelatedId1)
+          assert(rtre.getRelatedId2 == a.getRelatedId2)
+          assert(rtre.asInstanceOf[RelationToRemoteEntity].getRemoteInstanceId == a.asInstanceOf[RelationToRemoteEntity].getRemoteInstanceId)
+        case a: RelationToLocalEntity =>
+          assert(rte.getId == a.getId)
+          assert(rte.getFormId == a.getFormId)
+          assert(rte.getSortingIndex == a.getSortingIndex)
+          assert(rte.getValidOnDate == a.getValidOnDate)
+          assert(rte.getObservationDate == a.getObservationDate)
+          assert(rte.getRelatedId1 == a.getRelatedId1)
+          assert(rte.getRelatedId2 == a.getRelatedId2)
+        case a: RelationToGroup =>
+          assert(rtg.getId == a.getId)
+          assert(rtg.getFormId == a.getFormId)
+          assert(rtg.getSortingIndex == a.getSortingIndex)
+          assert(rtg.getValidOnDate == a.getValidOnDate)
+          assert(rtg.getObservationDate == a.getObservationDate)
+          assert(rtg.getParentId == a.getParentId)
+          assert(rtg.getGroupId == a.getGroupId)
+        case _ => throw new org.onemodel.core.OmException("Unexpected type: " + attribute.getClass.getCanonicalName)
+      }
+    }
+
+    val attributes2: (Array[(Long, Attribute)], Int) = mRD.getSortedAttributes(testEntityId1, 0, 0, onlyPublicEntitiesIn = true)
+    assert(attributes2._1.length == 7)
+  }
 }
+// */
