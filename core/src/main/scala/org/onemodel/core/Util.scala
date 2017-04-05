@@ -1,10 +1,10 @@
 /*  This file is part of OneModel, a program to manage knowledge.
-    Copyright in each year of 2003-2004 and 2008-2016 inclusive, Luke A. Call; all rights reserved.
+    Copyright in each year of 2003-2004 and 2008-2017 inclusive, Luke A. Call; all rights reserved.
     (That copyright statement was previously 2013-2015, until I remembered that much of Controller came from TextUI.scala, and TextUI.java before that.
     And this file initially came from Controller.scala.)
     OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
-    distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
-    of the License, or (at your option) any later version.  See the file LICENSE for details.
+    distribution, and the GNU Affero General Public License as published by the Free Software Foundation.
+    See the file LICENSE for license version and details.
     OneModel is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
     You should have received a copy of the GNU Affero General Public License along with OneModel.  If not, see <http://www.gnu.org/licenses/>
@@ -51,6 +51,7 @@ object Util {
   val FILE_TYPE: String = "FileAttribute"
   //i.e., "relationTypeType", or the thing that we sometimes put in an attribute type parameter, though not exactly an attribute type, which is "RelationType":
   val RELATION_TYPE_TYPE: String = "RelationType"
+  // IF/WHEN EVER UPDATING THESE TABLE NAMES, also update in cleanTestAccount.psql:
   val RELATION_TO_LOCAL_ENTITY_TYPE: String = "RelationToEntity"
   val RELATION_TO_GROUP_TYPE: String = "RelationToGroup"
   val RELATION_TO_REMOTE_ENTITY_TYPE: String = "RelationToRemoteEntity"
@@ -77,7 +78,7 @@ object Util {
   val USER_PREFERENCES = "User preferences"
   final val SHOW_PUBLIC_PRIVATE_STATUS_PREFERENCE = "Should entity lists show public/private status for each?"
   final val DEFAULT_ENTITY_PREFERENCE = "Which entity should be displayed as default, when starting the program?"
-
+  // (If change next line, also change the hard-coded use in the file first.exp.)
   val HEADER_CONTENT_TAG = "htmlHeaderContent"
   val BODY_CONTENT_TAG = "htmlInitialBodyContent"
   val FOOTER_CONTENT_TAG = "htmlFooterContent"
@@ -259,8 +260,9 @@ object Util {
     {
       db.rollbackTrans()
     }
+    // If changing this string (" - 1"), also change in first.exp that looks for it (distinguished from " - 2" elsewhere).
     val ans = ui.askYesNoQuestion("An error occurred: \"" + e.getClass.getName + ": " + e.getMessage + "\".  If you can provide simple instructions to " +
-                                  "reproduce it consistently, maybe it can be fixed.  Do you want to see the detailed output?")
+                                  "reproduce it consistently, maybe it can be fixed - 1.  Do you want to see the detailed output?")
     if (ans.isDefined && ans.get) {
       ui.displayText(throwableToString(e))
     }
@@ -518,8 +520,9 @@ object Util {
                                       "    http://onemodel.org/download/OM-LICENSE " + TextUI.NEWLN +
                                       ".  (Do you want to see the detailed error output?)")
         if (ans.isDefined && ans.get) {
+          // (" - 2" is to distinguished from " - 1" because some code looks for " - 1".)
           ui.displayText("The error was: \"" + e.getClass.getName + ": " + e.getMessage + "\".  If you can provide simple instructions to " +
-                         "reproduce it consistently, maybe it can be fixed.  " + Util.throwableToString(e))
+                         "reproduce it consistently, maybe it can be fixed - 2.  " + Util.throwableToString(e))
         }
     }
     all

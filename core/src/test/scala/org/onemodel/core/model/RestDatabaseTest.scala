@@ -1,19 +1,13 @@
 /*  This file is part of OneModel, a program to manage knowledge.
-    Copyright in each year of 2016-2016 inclusive, Luke A. Call; all rights reserved.
+    Copyright in each year of 2016-2017 inclusive, Luke A. Call; all rights reserved.
     OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
-    distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
-    of the License, or (at your option) any later version.  See the file LICENSE for details.
+    distribution, and the GNU Affero General Public License as published by the Free Software Foundation.
+    See the file LICENSE for license version and details.
     OneModel is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
     You should have received a copy of the GNU Affero General Public License along with OneModel.  If not, see <http://www.gnu.org/licenses/>
 */
 package org.onemodel.core.model
-
-// Comment out the next line (i.e., put "//" in front of the "/*") to make these tests run.  They are not currently run automatically
-// because nothing is in place to start the required web server automatically.  To start it manually, install sbt, then cd into
-// the "web" module and run "sbt", then inside sbt type the command "~ run".  For details, see the URLs in RestDatabase mentioning playframework.com, and the
-// call to "new RestDatabase" below.
-//%% /*
 
 import java.io.{File, FileOutputStream}
 import java.util
@@ -25,6 +19,17 @@ import scala.collection._
 import scala.collection.JavaConversions._
 
 class RestDatabaseTest extends FlatSpec with MockitoSugar {
+  // Comment out the next line (i.e., put "//" in front of the "/*") to make these tests run, but don't commit it
+  // that way (yet).  They are not currently run automatically
+  // because nothing is in place to start the required web server automatically.  To start it manually, install sbt, then cd into
+  // the "web" module and run "sbt", then inside sbt type the command "~ run".  For details, see the URLs in RestDatabase mentioning playframework.com, and the
+  // call to "new RestDatabase" below.  Before the web module can build, "mvn install" has to be run in the core module.
+  // NOTE: WHEN MAKING THESE AUTOMATICALLY RUN AS PART OF "mvn install" OR "mvn verify", BE SURE TO UPDATE THE "INSTALLING" DOCUMENT(s),
+  // AND when updatinging those docs, keep
+  // in mind what EntityMenuIT.java says about the testsuite/README file, so that one coming to the project for the first time has an overall guide for a good
+  // dev onboarding experience.
+  /*
+
   private val mPG: PostgreSQLDatabase = new PostgreSQLDatabase(Database.TEST_USER, Database.TEST_USER)
   // mRD will access mPG via REST, in the tests, so this tests both web module code and core code.
   private val mRD: RestDatabase = new RestDatabase("localhost:9000")
@@ -35,11 +40,8 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
   }
 
   "start" should "work" in {
-    val remote = mRD.isRemote
-    assert(remote)
-
-    val id = mRD.id
-    assert(id.length > 30)
+    assert(mRD.isRemote)
+    assert(mRD.id.length > 30)
 
     mPG.setUserPreference_EntityId(Util.DEFAULT_ENTITY_PREFERENCE, mPG.getSystemEntityId)
     val defaultEntityId = mRD.getDefaultEntityId
@@ -106,13 +108,16 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
       }
       found
     }
+    val (_, _ /*groupId2, relationToGroup2*/) = DatabaseTestUtils.createAndAddTestRelationToGroup_ToEntity(mPG, entityId0, relTypeId, grpName + "2")
+    val (_, _ /*groupId3, relationToGroup3*/) = DatabaseTestUtils.createAndAddTestRelationToGroup_ToEntity(mPG, entityId0, relTypeId, grpName + "3")
     val groupsMatching: util.ArrayList[Group] = mRD.getMatchingGroups(0, None, None, grpName)
-    assert(groupsMatching.size >= 1)
+    assert(groupsMatching.size >= 3)
     assert(foundInResults(groupsMatching, groupId))
     val groupsMatching2 = mRD.getMatchingGroups(0, Some(2), None, grpName)
     assert(groupsMatching2.size == 2)
     val groupsMatching3 = mRD.getMatchingGroups(0, None, Some(groupId), grpName)
     assert(! foundInResults(groupsMatching3, groupId))
+    assert(groupsMatching3.size == groupsMatching.size - 1)
 
     val groups = mRD.getGroups(0, None)
     assert(groups.size > 0)
@@ -483,7 +488,7 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     assert(rtreData(2).get.asInstanceOf[Long] == rtre.getObservationDate)
     assert(rtreData(3).get.asInstanceOf[Long] == rtre.getSortingIndex)
     assert(rtreData.length == 4)
-    rtre.update(relTypeId, validOnDateIn = Some(9999), observationDateIn = Some(9998))
+    rtre.update(validOnDateIn = Some(9999), observationDateIn = Some(9998))
     val rtreData2 = mRD.getRelationToRemoteEntityData(relTypeId, testEntityId1, omInstance.getId, rtre.getRelatedId2)
     assert(rtreData2(1).get == 9999)
     assert(rtreData2(2).get == 9998)
@@ -522,6 +527,18 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     assert(rtgDataByKeys(5).get.asInstanceOf[Long] == rtg.getObservationDate)
     assert(rtgDataByKeys(6).get.asInstanceOf[Long] == rtg.getSortingIndex)
     assert(rtgDataByKeys.length == 7)
+
+    // This was tested successfully with mocks when it was in RelationToEntityTest, but then I got rid of the mocks because of a bug.
+    // So to continue auto-testing RelationToRemoteEntity.getDisplayString (but here now), it could be good to get the ability
+    // to *create* a remote entity (without mocks), then put this back and get it to work right:
+//    entity1.addRelationToRemoteEntity(relationTypeId, 4321L)
+//    val rtre = new RelationToRemoteEntity(mDB, rteId, relTypeId, entity1Id, remoteInstanceId, entity2Id, None, date, 0)
+//    val displayString: String = rtre.getDisplayString(0, Some(mockEntity2), Some(mockRelationType), simplify = false)
+//    val expectedObservedDateOutput2 = "Wed 1969-12-31 17:00:00:"+date+" MST"
+//    val wholeExpectedThing2: String = relationTypeName + " (at " + remoteAddress + "): \033[36m" + entity2Name +
+//                                      "\033[0m; valid unsp'd, obsv'd "+expectedDateOutput
+//    assert(displayString.contains(" (at "), "unexpected contents: " + displayString)
+//    assert(displayString == wholeExpectedThing2, "unexpected contents: " + displayString)
   }
 
   "getGroupData etc" should "work" in {
@@ -554,13 +571,13 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     assert(entriesData(1)(0).get.asInstanceOf[Long] == entityId1)
     assert(entriesData.size == 2)
 
-    val (relationToGroupId3, relationTypeId3, groupId3, moreRowsAvailable3) = mRD.findRelationToAndGroup_OnEntity(entityId0, Some(groupName))
+    val (relationToGroupId3, relationTypeId3, groupId3, _, moreRowsAvailable3) = mRD.findRelationToAndGroup_OnEntity(entityId0, Some(groupName))
     assert(relationToGroupId3.get == rtg.getId)
     assert(relationTypeId3.get == relationTypeId)
     assert(groupId3.get == groupId)
     assert(!moreRowsAvailable3)
 
-    val (relationToGroupId4, _, _, moreRowsAvailable4) = mRD.findRelationToAndGroup_OnEntity(entityId0, Some(Math.random().toString))
+    val (relationToGroupId4, _, _, _, moreRowsAvailable4) = mRD.findRelationToAndGroup_OnEntity(entityId0, Some(Math.random().toString))
     assert(relationToGroupId4.isEmpty)
     assert(!moreRowsAvailable4)
 
@@ -580,6 +597,10 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     val part = "test entity for multiple tests"
     val entityName1 = part + "1"
     val testEntityId1: Long = mPG.createEntity(entityName1)
+    val remoteEntity = new Entity(mRD, testEntityId1)
+    assert(intercept[NotImplementedError] {
+                                  remoteEntity.updatePublicStatus(Some(false))
+                                }.getMessage.contains("implementation is missing"))
     val testEntity1: Entity = new Entity(mPG, testEntityId1)
     val entityName2 = part + "2"
     val testEntityId2: Long = mPG.createEntity(entityName2)
@@ -638,9 +659,10 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     assert(entitiesMatching2.size == 2)
     val entitiesMatching3 = mRD.getMatchingEntities(0, None, Some(testEntityId1), part)
     assert(! foundInResults(entitiesMatching3, testEntityId1))
+
   }
 
-  "getSortedAttributes" should "work" in {
+  "getSortedAttributes etc" should "work" in {
     val testEntityId1: Long = mPG.createEntity("test entity for multiple tests1")
     val testEntity1: Entity = new Entity(mPG, testEntityId1)
     val attributeTypeId: Long = mPG.createRelationType("contains", "", RelationType.UNIDIRECTIONAL)
@@ -744,5 +766,7 @@ class RestDatabaseTest extends FlatSpec with MockitoSugar {
     val attributes2: (Array[(Long, Attribute)], Int) = mRD.getSortedAttributes(testEntityId1, 0, 0, onlyPublicEntitiesIn = true)
     assert(attributes2._1.length == 7)
   }
-}
+
+// (Keep next line to match the commentable one at the top, right after the package statement.)
 // */
+}

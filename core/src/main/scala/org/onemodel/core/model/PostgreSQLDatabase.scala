@@ -1,8 +1,8 @@
 /*  This file is part of OneModel, a program to manage knowledge.
-    Copyright in each year of 2003, 2004, 2010, 2011, and 2013-2016 inclusive, Luke A. Call; all rights reserved.
+    Copyright in each year of 2003, 2004, 2010, 2011, and 2013-2017 inclusive, Luke A. Call; all rights reserved.
     OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
-    distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
-    of the License, or (at your option) any later version.  See the file LICENSE for details.
+    distribution, and the GNU Affero General Public License as published by the Free Software Foundation.
+    See the file LICENSE for license version and details.
     OneModel is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
     You should have received a copy of the GNU Affero General Public License along with OneModel.  If not, see <http://www.gnu.org/licenses/>
@@ -40,6 +40,8 @@ object PostgreSQLDatabase {
   }
 
   private def destroyTables_helper(connIn: Connection) {
+    /**** WHEN MAINTAINING THIS METHOD, SIMILARLY MAINTAIN THE SCRIPT core/bin/purge-om-test-database* SO IT DOES THE SAME WORK. ****/
+
     // Doing these individually so that if one fails (not previously existing, such as testing or a new installation), the others can proceed (drop method
     // ignores that exception).
 
@@ -1191,11 +1193,12 @@ class PostgreSQLDatabase(username: String, var password: String) extends Databas
     commitTrans()
   }
 
-  /** Returns at most 1 row's info (id, relationTypeId, groupId), and a boolean indicating if more were available.
+  /** Returns at most 1 row's info (id, relationTypeId, groupId, name), and a boolean indicating if more were available.
     * If 0 rows are found, returns (None, None, None, false), so this expects the caller
     * to know there is only one or deal with the None.
     */
-  def findRelationToAndGroup_OnEntity(entityIdIn: Long, groupNameIn: Option[String] = None): (Option[Long], Option[Long], Option[Long], Boolean) = {
+  def findRelationToAndGroup_OnEntity(entityIdIn: Long,
+                                      groupNameIn: Option[String] = None): (Option[Long], Option[Long], Option[Long], Option[String], Boolean) = {
     val nameCondition = if (groupNameIn.isDefined) {
       val name = escapeQuotesEtc(groupNameIn.get)
       "g.name='" + name + "'"
@@ -1203,17 +1206,19 @@ class PostgreSQLDatabase(username: String, var password: String) extends Databas
       "true"
 
     // "limit 2", so we know and can return whether more were available:
-    val rows = dbQuery("select rtg.id, rtg.rel_type_id, g.id from relationtogroup rtg, grupo g where rtg.group_id=g.id and rtg.entity_id=" + entityIdIn +
-                       " and " + nameCondition + " order by rtg.id limit 2", "Long,Long,Long")
+    val rows = dbQuery("select rtg.id, rtg.rel_type_id, g.id, g.name from relationtogroup rtg, grupo g where rtg.group_id=g.id" +
+                       " and rtg.entity_id=" + entityIdIn +
+                       " and " + nameCondition + " order by rtg.id limit 2", "Long,Long,Long,String")
     // there could be none found, or more than one, but:
     if (rows.isEmpty)
-      (None, None, None, false)
+      (None, None, None, None, false)
     else {
       val row = rows.head
       val id: Option[Long] = Some(row(0).get.asInstanceOf[Long])
       val relTypeId: Option[Long] = Some(row(1).get.asInstanceOf[Long])
       val groupId: Option[Long] = Some(row(2).get.asInstanceOf[Long])
-      (id, relTypeId, groupId, rows.size > 1)
+      val name: Option[String] = Some(row(3).get.asInstanceOf[String])
+      (id, relTypeId, groupId, name, rows.size > 1)
     }
   }
 
@@ -2327,7 +2332,7 @@ class PostgreSQLDatabase(username: String, var password: String) extends Databas
           if (isEntityAttrsNotGroupEntries) {
             val formId: Long = entry(0).get.asInstanceOf[Int]
             val attributeId: Long = entry(1).get.asInstanceOf[Long]
-            updateAttributeSorting(entityIdOrGroupIdIn, formId, attributeId, next)
+            updateAttributeSortingIndex(entityIdOrGroupIdIn, formId, attributeId, next)
           } else {
             val id: Long = entry(0).get.asInstanceOf[Long]
             updateSortingIndexInAGroup(entityIdOrGroupIdIn, id, next)
@@ -2524,7 +2529,7 @@ class PostgreSQLDatabase(username: String, var password: String) extends Databas
     results
   }
 
-  /** For a given group, find all the RelationToGroup's that contain entities that contain the provided group id, and return their groupIds.
+  /** For a given group, find all the RelationsToGroup that contain entities that contain the provided group id, and return their groupIds.
     * What is really the best name for this method (concise but clear on what it does)?
     */
   def getGroupsContainingEntitysGroupsIds(groupIdIn: Long, limitIn: Option[Long] = Some(5)): List[Array[Option[Any]]] = {
@@ -2677,6 +2682,15 @@ class PostgreSQLDatabase(username: String, var password: String) extends Databas
                             Database.getRelationToLocalEntity_resultTypes)
   }
 
+  def getRelationToLocalEntityDataById(idIn: Long): Array[Option[Any]] = {
+    dbQueryWrapperForOneRow("select rte.rel_type_id, rte.entity_id, rte.entity_id_2, rte.valid_on_date, rte.observation_date, asort.sorting_index" +
+                            " from RelationToEntity rte, AttributeSorting asort" +
+                            " where rte.id=" + idIn +
+                            " and rte.entity_id=asort.entity_id and asort.attribute_form_id=" + Database.getAttributeFormId(Util.RELATION_TO_LOCAL_ENTITY_TYPE) +
+                            " and rte.id=asort.attribute_id",
+                            "Long,Long," + Database.getRelationToLocalEntity_resultTypes)
+  }
+
   def getRelationToRemoteEntityData(relationTypeIdIn: Long, entityId1In: Long, remoteInstanceIdIn: String, entityId2In: Long): Array[Option[Any]] = {
     dbQueryWrapperForOneRow("select rte.id, rte.valid_on_date, rte.observation_date, asort.sorting_index" +
                             " from RelationToRemoteEntity rte, AttributeSorting asort" +
@@ -2788,7 +2802,7 @@ class PostgreSQLDatabase(username: String, var password: String) extends Databas
              "entity_id=" + entityIdIn)
   }
 
-  def updateAttributeSorting(entityIdIn: Long, attributeFormIdIn: Long, attributeIdIn: Long, sortingIndexIn: Long) {
+  def updateAttributeSortingIndex(entityIdIn: Long, attributeFormIdIn: Long, attributeIdIn: Long, sortingIndexIn: Long) {
     dbAction("update AttributeSorting set (sorting_index) = (" + sortingIndexIn + ") where entity_id=" + entityIdIn + " and  " +
              "attribute_form_id=" + attributeFormIdIn + " and attribute_id=" + attributeIdIn)
   }
@@ -2798,6 +2812,7 @@ class PostgreSQLDatabase(username: String, var password: String) extends Databas
   def verifyFileAttributeContentIntegrity(fileAttributeIdIn: Long): (Boolean, Option[String]) = {
     // Idea: combine w/ similar logic in FileAttribute.md5Hash?
     // Idea: compare actual/stored file sizes also? or does the check of md5 do enough as is?
+    // Idea (tracked in tasks): switch to some SHA algorithm since they now say md5 is weaker?
     val messageDigest = java.security.MessageDigest.getInstance("MD5")
     def action(bufferIn: Array[Byte], startingIndexIn: Int, numBytesIn: Int) {
       messageDigest.update(bufferIn, startingIndexIn, numBytesIn)
@@ -3185,12 +3200,12 @@ class PostgreSQLDatabase(username: String, var password: String) extends Databas
       groupIdResults.add(result(0).get.asInstanceOf[Long])
     }
     require(groupIdResults.size == earlyResults.size)
-    val containingRelationToGroups: java.util.ArrayList[RelationToGroup] = new java.util.ArrayList[RelationToGroup]
+    val containingRelationsToGroup: java.util.ArrayList[RelationToGroup] = new java.util.ArrayList[RelationToGroup]
     for (gid <- groupIdResults.toArray) {
       val rtgs = getRelationsToGroupContainingThisGroup(gid.asInstanceOf[Long], 0)
-      for (rtg <- rtgs.toArray) containingRelationToGroups.add(rtg.asInstanceOf[RelationToGroup])
+      for (rtg <- rtgs.toArray) containingRelationsToGroup.add(rtg.asInstanceOf[RelationToGroup])
     }
-    containingRelationToGroups
+    containingRelationsToGroup
   }
 
   // 1st parm is 0-based index to start with, 2nd parm is # of obj's to return (if None, means no limit).

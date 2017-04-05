@@ -1,8 +1,8 @@
 /*  This file is part of OneModel, a program to manage knowledge.
-    Copyright in each year of 2003, 2004, and 2010-2016 inclusive, Luke A Call; all rights reserved.
+    Copyright in each year of 2016-2017 inclusive, Luke A Call; all rights reserved.
     OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
-    distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
-    of the License, or (at your option) any later version.  See the file LICENSE for details.
+    distribution, and the GNU Affero General Public License as published by the Free Software Foundation.
+    See the file LICENSE for license version and details.
     OneModel is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
     You should have received a copy of the GNU Affero General Public License along with OneModel.  If not, see <http://www.gnu.org/licenses/>
@@ -87,7 +87,7 @@ class OmInstance(val mDB: Database, mId: String) {
   }
 
   protected def readDataFromDB() {
-    val omInstanceData = mDB.getOmInstanceData(mId)
+    val omInstanceData: Array[Option[Any]] = mDB.getOmInstanceData(mId)
     if (omInstanceData.length == 0) {
       throw new OmException("No results returned from data request for: " + mId)
     }

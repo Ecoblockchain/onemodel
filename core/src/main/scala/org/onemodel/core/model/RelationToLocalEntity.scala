@@ -1,8 +1,8 @@
 /*  This file is part of OneModel, a program to manage knowledge.
-    Copyright in each year of 2004, 2010, 2011, and 2013-2016 inclusive, Luke A. Call; all rights reserved.
+    Copyright in each year of 2004, 2010, 2011, and 2013-2017 inclusive, Luke A. Call; all rights reserved.
     OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
-    distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
-    of the License, or (at your option) any later version.  See the file LICENSE for details.
+    distribution, and the GNU Affero General Public License as published by the Free Software Foundation.
+    See the file LICENSE for license version and details.
     OneModel is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
     You should have received a copy of the GNU Affero General Public License along with OneModel.  If not, see <http://www.gnu.org/licenses/>
@@ -15,6 +15,26 @@
 package org.onemodel.core.model
 
 import org.onemodel.core.{Util, OmException}
+
+object RelationToLocalEntity {
+  /** This is for times when you want None if it doesn't exist, instead of the exception thrown by the Entity constructor.  Or for convenience in tests.
+    */
+  def getRelationToLocalEntity(inDB: Database, id: Long): Option[RelationToLocalEntity] = {
+    val result: Array[Option[Any]] = inDB.getRelationToLocalEntityDataById(id)
+    val relTypeId = result(0).get.asInstanceOf[Long]
+    val eid1 = result(1).get.asInstanceOf[Long]
+    val eid2 = result(2).get.asInstanceOf[Long]
+    try Some(new RelationToLocalEntity(inDB, id, relTypeId, eid1, eid2))
+    catch {
+      case e: java.lang.Exception =>
+        //idea: see comment here in Entity.scala.
+        if (e.toString.indexOf(Util.DOES_NOT_EXIST) >= 0) {
+          None
+        }
+        else throw e
+    }
+  }
+}
 
 /** This class exists, instead of just using RelationToEntity, so that the consuming code can be more clear at any given
   * time as to whether RelationToLocalEntity or RelationToRemoteEntity is being used, to avoid subtle bugs.
@@ -81,14 +101,14 @@ class RelationToLocalEntity(mDB: Database, mId: Long, mRelTypeId: Long, mEntityI
     mDB.moveLocalEntityFromLocalEntityToGroup(this, targetGroupIdIn, sortingIndexIn)
   }
 
-  def update(oldAttrTypeIdIn: Long, validOnDateIn:Option[Long], observationDateIn:Option[Long], newAttrTypeIdIn: Option[Long] = None) {
+  def update(validOnDateIn:Option[Long], observationDateIn:Option[Long], newAttrTypeIdIn: Option[Long] = None) {
     val newAttrTypeId = newAttrTypeIdIn.getOrElse(getAttrTypeId)
     //Using validOnDateIn rather than validOnDateIn.get because validOnDate allows None, unlike others.
     //(Idea/possible bug: the way this is written might mean one can never change vod to None from something else: could ck callers & expectations
     // & how to be most clear (could be the same in RelationToGroup & other Attribute subclasses).)
     val vod = if (validOnDateIn.isDefined) validOnDateIn else getValidOnDate
     val od = if (observationDateIn.isDefined) observationDateIn.get else getObservationDate
-    mDB.updateRelationToLocalEntity(oldAttrTypeIdIn, mEntityId1, mEntityId2, newAttrTypeId, vod, od)
+    mDB.updateRelationToLocalEntity(mAttrTypeId, mEntityId1, mEntityId2, newAttrTypeId, vod, od)
     mValidOnDate = vod
     mObservationDate = od
     mAttrTypeId = newAttrTypeId

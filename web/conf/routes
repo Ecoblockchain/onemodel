@@ -1,5 +1,5 @@
 #    This file is part of OneModel, a program to manage knowledge.
-#    Copyright in each year of 2016-2016 inclusive, Luke A. Call; all rights reserved.
+#    Copyright in each year of 2016-2017 inclusive, Luke A. Call; all rights reserved.
 #    OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
 #    distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
 #    of the License, or (at your option) any later version.  See the file LICENSE for details.
@@ -113,7 +113,7 @@ GET   /groups/:id/containsEntity/:entityId         org.onemodel.web.controllers.
 GET   /groups/:id/containingEntities/:startingIndex         org.onemodel.web.controllers.Rest.getEntitiesContainingGroup(id: Long, startingIndex: Long, maxVals: Option[Long])
 GET   /groups/:id/entries/:startingObjectIndex         org.onemodel.web.controllers.Rest.getGroupEntryObjects(id: Long, startingObjectIndex: Long, maxVals: Option[Long])
 GET   /groups/:id/countOfContainingEntities         org.onemodel.web.controllers.Rest.getCountOfEntitiesContainingGroup(id: Long)
-GET   /groups/:id/containingRelationsToGroup/:startingIndex         org.onemodel.web.controllers.Rest.getContainingRelationsToGroup(id: Long, startingIndex: Long, limit: Option[Long])
+GET   /groups/:id/relationsToGroupContainingThisGroup/:startingIndex         org.onemodel.web.controllers.Rest.getRelationsToGroupContainingThisGroup(id: Long, startingIndex: Long, limit: Option[Long])
 GET   /classes/all/:startingObjectIndex         org.onemodel.web.controllers.Rest.getClasses(startingObjectIndex: Long, maxVals: Option[Long])
 GET   /classes/:id         org.onemodel.web.controllers.Rest.getClassData(id: Long)
 GET   /classes/:id/exists         org.onemodel.web.controllers.Rest.classKeyExists(id: Long)

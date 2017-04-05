@@ -1,8 +1,8 @@
 /*  This file is part of OneModel, a program to manage knowledge.
-    Copyright in each year of 2014-2016 inclusive, Luke A. Call; all rights reserved.
+    Copyright in each year of 2014-2017 inclusive, Luke A. Call; all rights reserved.
     OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
-    distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
-    of the License, or (at your option) any later version.  See the file LICENSE for details.
+    distribution, and the GNU Affero General Public License as published by the Free Software Foundation.
+    See the file LICENSE for license version and details.
     OneModel is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
     You should have received a copy of the GNU Affero General Public License along with OneModel.  If not, see <http://www.gnu.org/licenses/>
@@ -54,7 +54,7 @@ class ImportExport(val ui: TextUI, controller: Controller) {
     if (ans1.isDefined) {
       val path = ans1.get
       val makeThemPublic: Option[Boolean] = ui.askYesNoQuestion("Do you want the entities imported to be marked as public?  Set it to the value the " +
-                                                      "majority of imported data should have; you can then edit the individual exceptions afterward as " +
+                                                      "majority of imported data should have; you can then edit the individual settings afterward as " +
                                                       "needed.  Enter y for public, n for nonpublic, or a space for 'unknown/unspecified', aka decide later.",
                                                       Some(""), allowBlankAnswer = true)
       val ans3 = ui.askYesNoQuestion("Keep the filename as the top level of the imported list? (Answering no will put the top level entries from inside" +
@@ -966,7 +966,7 @@ class ImportExport(val ui: TextUI, controller: Controller) {
     val numSubEntries = {
       val numAttrs = entityIn.getAttributeCount
       if (numAttrs == 1) {
-        val (_, _, groupId, moreThanOneAvailable) = entityIn.findRelationToAndGroup
+        val (_, _, groupId, _, moreThanOneAvailable) = entityIn.findRelationToAndGroup
         if (groupId.isDefined && !moreThanOneAvailable) {
           entityIn.mDB.getGroupSize(groupId.get, 4)
         } else numAttrs

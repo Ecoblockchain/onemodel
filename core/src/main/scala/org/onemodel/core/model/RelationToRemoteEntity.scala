@@ -1,8 +1,8 @@
 /*  This file is part of OneModel, a program to manage knowledge.
-    Copyright in each year of 2004, 2010, 2011, and 2013-2016 inclusive, Luke A. Call; all rights reserved.
+    Copyright in each year of 2004, 2010, 2011, and 2013-2017 inclusive, Luke A. Call; all rights reserved.
     OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
-    distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
-    of the License, or (at your option) any later version.  See the file LICENSE for details.
+    distribution, and the GNU Affero General Public License as published by the Free Software Foundation.
+    See the file LICENSE for license version and details.
     OneModel is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
     You should have received a copy of the GNU Affero General Public License along with OneModel.  If not, see <http://www.gnu.org/licenses/>
@@ -25,11 +25,11 @@ import org.onemodel.core.{OmException, Util}
  * This 1st constructor instantiates an existing object from the DB and is rarely needed. You can use Entity.addRelationTo[Local|Remote]Entity() to
  * create a new persistent record.
  *
-   **NOTE**: it *does* make sense to instantiate a RelationToRemoteEntity with a db parameter being for a *local* (e.g., postgresql) database,
+   **NOTE**: it *yes does* make sense to instantiate a RelationToRemoteEntity with a db parameter being for a *local* (e.g., postgresql) database,
    because the local db contains references to remote ones.  Then, when creating for example an Entity for a record at a remote site, that
    would have a db parameter which is remote (i.e., an instance of RestDatabase; see Entity.addRelationToRemoteEntity).
 
-   %%*****  MAKE SURE  ***** that during maintenance, anything that gets data relating to mEntityId2 is using the right (remote) db!:
+   *****  MAKE SURE  ***** that during maintenance, anything that gets data relating to mEntityId2 is using the right (remote) db!:
  */
 class RelationToRemoteEntity(mDB: Database, mId: Long, mRelTypeId: Long, mEntityId1: Long, mRemoteInstanceId: String,
                        mEntityId2: Long) extends RelationToEntity(mDB, mId, mRelTypeId, mEntityId1, mEntityId2) {
@@ -88,14 +88,14 @@ class RelationToRemoteEntity(mDB: Database, mId: Long, mRelTypeId: Long, mEntity
     Database.getRestDatabase(mRemoteAddress)
   }
 
-  def update(oldAttrTypeIdIn: Long, validOnDateIn:Option[Long], observationDateIn:Option[Long], newAttrTypeIdIn: Option[Long] = None) {
+  def update(validOnDateIn:Option[Long], observationDateIn:Option[Long], newAttrTypeIdIn: Option[Long] = None) {
     val newAttrTypeId = newAttrTypeIdIn.getOrElse(getAttrTypeId)
     //Using validOnDateIn rather than validOnDateIn.get because validOnDate allows None, unlike others.
     //(Idea/possible bug: the way this is written might mean one can never change vod to None from something else: could ck callers & expectations
     // & how to be most clear (could be the same in RelationToGroup & other Attribute subclasses).)
     val vod = if (validOnDateIn.isDefined) validOnDateIn else getValidOnDate
     val od = if (observationDateIn.isDefined) observationDateIn.get else getObservationDate
-    mDB.updateRelationToRemoteEntity(oldAttrTypeIdIn, mEntityId1, getRemoteInstanceId, mEntityId2, newAttrTypeId, vod, od)
+    mDB.updateRelationToRemoteEntity(mAttrTypeId, mEntityId1, getRemoteInstanceId, mEntityId2, newAttrTypeId, vod, od)
     mValidOnDate = vod
     mObservationDate = od
     mAttrTypeId = newAttrTypeId

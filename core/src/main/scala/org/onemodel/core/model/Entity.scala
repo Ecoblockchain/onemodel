@@ -1,8 +1,8 @@
 /*  This file is part of OneModel, a program to manage knowledge.
-    Copyright in each year of 2003, 2004, and 2010-2016 inclusive, Luke A Call; all rights reserved.
+    Copyright in each year of 2003, 2004, and 2010-2017 inclusive, Luke A Call; all rights reserved.
     OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
-    distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
-    of the License, or (at your option) any later version.  See the file LICENSE for details.
+    distribution, and the GNU Affero General Public License as published by the Free Software Foundation.
+    See the file LICENSE for license version and details.
     OneModel is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
     You should have received a copy of the GNU Affero General Public License along with OneModel.  If not, see <http://www.gnu.org/licenses/>
@@ -23,16 +23,18 @@ import scala.collection.mutable
 object Entity {
   def createEntity(inDB: Database, inName: String, inClassId: Option[Long] = None, isPublicIn: Option[Boolean] = None): Entity = {
     val id: Long = inDB.createEntity(inName, inClassId, isPublicIn)
-    new Entity(inDB, id, false)
+    new Entity(inDB, id)
   }
 
   def nameLength: Int = Database.entityNameLength
 
-  def isDuplicate(inDB: Database, inName: String, inSelfIdToIgnore: Option[Long] = None): Boolean = inDB.isDuplicateEntityName(inName, inSelfIdToIgnore)
+  def isDuplicate(inDB: Database, inName: String, inSelfIdToIgnore: Option[Long] = None): Boolean = {
+    inDB.isDuplicateEntityName(inName, inSelfIdToIgnore)
+  }
 
-  /** This is for times when you want None if it doesn't exist, instead of the exception thrown by the Entity constructor.
+  /** This is for times when you want None if it doesn't exist, instead of the exception thrown by the Entity constructor.  Or for convenience in tests.
     */
-  def getEntityById(inDB: Database, id: Long): Option[Entity] = {
+  def getEntity(inDB: Database, id: Long): Option[Entity] = {
     try Some(new Entity(inDB, id))
     catch {
       case e: java.lang.Exception =>
@@ -207,14 +209,14 @@ class Entity(val mDB: Database, mId: Long) {
     * the remote address for a given OM instance can change! and the local address is displayed as blank!), see uniqueIdentifier
     * for that.  This one is like that other in a way, but more for human consumption (eg data export for human reading, not for re-import -- ?).
     */
-  val readableIdentifier: String = {
+  lazy val readableIdentifier: String = {
     val remotePrefix =
       if (mDB.getRemoteAddress.isEmpty) {
         ""
       } else {
         mDB.getRemoteAddress.get + "_"
       }
-    remotePrefix + getId
+    remotePrefix + getId.toString
   }
 
   /** Intended as a unique string to distinguish an entity, even across OM Instances.  Compare to getHumanIdentifier.
@@ -296,15 +298,15 @@ class Entity(val mDB: Database, mId: Long) {
     mDB.getContainingGroupsIds(getId)
   }
 
-  def getContainingRelationsToGroup(startingIndexIn: Long, maxValsIn: Option[Long] = None): java.util.ArrayList[RelationToGroup] = {
+  def getContainingRelationsToGroup(startingIndexIn: Long = 0, maxValsIn: Option[Long] = None): java.util.ArrayList[RelationToGroup] = {
     mDB.getContainingRelationsToGroup(getId, startingIndexIn, maxValsIn)
   }
 
-  def getContainingRelationToGroupDescriptions(limitIn: Option[Long]): util.ArrayList[String] = {
+  def getContainingRelationToGroupDescriptions(limitIn: Option[Long] = None): util.ArrayList[String] = {
     mDB.getContainingRelationToGroupDescriptions(getId, limitIn)
   }
 
-  def  findRelationToAndGroup: (Option[Long], Option[Long], Option[Long], Boolean) = {
+  def findRelationToAndGroup: (Option[Long], Option[Long], Option[Long], Option[String], Boolean) = {
     mDB.findRelationToAndGroup_OnEntity(getId)
   }
 
@@ -317,15 +319,15 @@ class Entity(val mDB: Database, mId: Long) {
     mDB.getCountOfLocalEntitiesContainingLocalEntity(getId)
   }
 
-  def getLocalEntitiesContainingEntity(startingIndexIn: Long, maxValsIn: Option[Long] = None): java.util.ArrayList[(Long, Entity)] = {
+  def getLocalEntitiesContainingEntity(startingIndexIn: Long = 0, maxValsIn: Option[Long] = None): java.util.ArrayList[(Long, Entity)] = {
     mDB.getLocalEntitiesContainingLocalEntity(getId, startingIndexIn, maxValsIn)
   }
 
-  def getAdjacentAttributesSortingIndexes(sortingIndexIn: Long, limitIn: Option[Long], forwardNotBackIn: Boolean): List[Array[Option[Any]]] = {
+  def getAdjacentAttributesSortingIndexes(sortingIndexIn: Long, limitIn: Option[Long] = None, forwardNotBackIn: Boolean = true): List[Array[Option[Any]]] = {
     mDB.getAdjacentAttributesSortingIndexes(getId, sortingIndexIn, limitIn, forwardNotBackIn = forwardNotBackIn)
   }
 
-  def getNearestAttributeEntrysSortingIndex(startingPointSortingIndexIn: Long, forwardNotBackIn: Boolean): Option[Long] = {
+  def getNearestAttributeEntrysSortingIndex(startingPointSortingIndexIn: Long, forwardNotBackIn: Boolean = true): Option[Long] = {
     mDB.getNearestAttributeEntrysSortingIndex(getId, startingPointSortingIndexIn, forwardNotBackIn = forwardNotBackIn)
   }
 
@@ -333,11 +335,11 @@ class Entity(val mDB: Database, mId: Long) {
     mDB.renumberSortingIndexes(getId, callerManagesTransactionsIn, isEntityAttrsNotGroupEntries = true)
   }
 
-  def updateAttributeSorting(attributeFormIdIn: Long, attributeIdIn: Long, sortingIndexIn: Long): Unit = {
-    mDB.updateAttributeSorting(getId, attributeFormIdIn, attributeIdIn, sortingIndexIn)
+  def updateAttributeSortingIndex(attributeFormIdIn: Long, attributeIdIn: Long, sortingIndexIn: Long): Unit = {
+    mDB.updateAttributeSortingIndex(getId, attributeFormIdIn, attributeIdIn, sortingIndexIn)
   }
 
-  def getEntityAttributeSortingIndex(attributeFormIdIn: Long, attributeIdIn: Long): Long = {
+  def getAttributeSortingIndex(attributeFormIdIn: Long, attributeIdIn: Long): Long = {
     mDB.getEntityAttributeSortingIndex(getId, attributeFormIdIn, attributeIdIn)
   }
 
@@ -446,21 +448,6 @@ class Entity(val mDB: Database, mId: Long) {
     }
   }
 
-//  //%%del:
-//  def addRelationToEntity(inAttrTypeId: Long, inEntityId2: Long, sortingIndexIn: Option[Long],
-//                          inValidOnDate: Option[Long] = None, inObservationDate: Long = System.currentTimeMillis, remoteIn: Boolean = false,
-//                          remoteInstanceIdIn: Option[String] = None): RelationToEntity = {
-//    require(remoteIn == remoteInstanceIdIn.isDefined)
-//    if (!remoteIn) {
-//      val rteId = mDB.createRelationToLocalEntity(inAttrTypeId, getId, inEntityId2, inValidOnDate, inObservationDate, sortingIndexIn).getId
-//      new RelationToLocalEntity(mDB, rteId, inAttrTypeId, getId, inEntityId2)
-//    } else {
-//      val rteId = mDB.createRelationToRemoteEntity(inAttrTypeId, getId, inEntityId2, inValidOnDate, inObservationDate,
-//                                                   remoteInstanceIdIn.get, sortingIndexIn).getId
-//      new RelationToRemoteEntity(mDB, rteId, inAttrTypeId, getId, remoteInstanceIdIn.get, inEntityId2)
-//    }
-//  }
-
   def addRelationToLocalEntity(inAttrTypeId: Long, inEntityId2: Long, sortingIndexIn: Option[Long],
                           inValidOnDate: Option[Long] = None, inObservationDate: Long = System.currentTimeMillis): RelationToLocalEntity = {
     val rteId = mDB.createRelationToLocalEntity(inAttrTypeId, getId, inEntityId2, inValidOnDate, inObservationDate, sortingIndexIn).getId
@@ -539,12 +526,8 @@ class Entity(val mDB: Database, mId: Long) {
     new RelationToGroup(mDB, newRtgId, getId, relTypeIdIn, groupIdIn, validOnDateIn, observationDateIn, sortingIndex)
   }
 
-  def getAttributes(startingObjectIndexIn: Int = 0, maxValsIn: Int = 0, onlyPublicEntitiesIn: Boolean = true): (Array[(Long, Attribute)], Int) = {
-    mDB.getSortedAttributes(getId, startingObjectIndexIn, maxValsIn, onlyPublicEntitiesIn)
-  }
-
   def getSortedAttributes(startingObjectIndexIn: Int = 0, maxValsIn: Int = 0, onlyPublicEntitiesIn: Boolean = true): (Array[(Long, Attribute)], Int) = {
-    mDB.getSortedAttributes(getId, onlyPublicEntitiesIn = onlyPublicEntitiesIn)
+    mDB.getSortedAttributes(getId, startingObjectIndexIn, maxValsIn, onlyPublicEntitiesIn = onlyPublicEntitiesIn)
   }
 
   def updateClass(classIdIn: Option[Long]): Unit = {

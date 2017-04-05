@@ -1,8 +1,8 @@
 /*  This file is part of OneModel, a program to manage knowledge.
-    Copyright in each year of 2004, 2010, 2011, and 2013-2016 inclusive, Luke A. Call; all rights reserved.
+    Copyright in each year of 2004, 2010, 2011, and 2013-2017 inclusive, Luke A. Call; all rights reserved.
     OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
-    distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
-    of the License, or (at your option) any later version.  See the file LICENSE for details.
+    distribution, and the GNU Affero General Public License as published by the Free Software Foundation.
+    See the file LICENSE for license version and details.
     OneModel is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
     You should have received a copy of the GNU Affero General Public License along with OneModel.  If not, see <http://www.gnu.org/licenses/>
@@ -34,13 +34,6 @@ abstract protected[this] class RelationToEntity(mDB: Database, mId: Long, mRelTy
   def getRelatedId1: Long = mEntityId1
   def getRelatedId2: Long = mEntityId2
 
-  //%%probly del after testing show non-need:
-//  /** putting here for convenience in the IDE, vs. writing whole thing out each time.
-//    */
-//  def isRelationToRemoteEntity: Boolean = {
-//    this.isInstanceOf[RelationToRemoteEntity]
-//  }
-
   /**
    * @param relatedEntityIn, could be either mEntityId2 or 1: it is always *not* the entity from whose perspective the result will be returned, e.g.,
    * 'x contains y' OR 'y is contained by x': the 2nd parameter should be the *2nd* one in that statement.
@@ -65,29 +58,16 @@ abstract protected[this] class RelationToEntity(mDB: Database, mId: Long, mRelTy
     }
     //   *****  MAKE SURE  ***** that during maintenance, anything that gets data relating to mEntityId2 is using the right (remote) db!:
     val relatedEntity: Entity = {
-      if (relatedEntityIn.isDefined && relatedEntityIn.get.getId == mEntityId2) {
-        //%%when testing, make sure the names look right that result from either part of this IF, incl since it wasnt doing the 2nd part *at all* before this mod.
-        relatedEntityIn.getOrElse(getEntityForEntityId2)
-      } else {
-        new Entity(mDB, mEntityId1)
-      }
+      relatedEntityIn.getOrElse(getEntityForEntityId2)
     }
     val rtName: String = {
-      //%%clean up after testing?:
-//      if (relatedEntityIn.isDefined) {
-//        if (relatedEntityIn.get.getId == mEntityId2) {
-        if (relatedEntity.getId == mEntityId2) {
-          relType.getName
-//        } else if (relatedEntityIn.get.getId == mEntityId1) {
-        } else if (relatedEntity.getId == mEntityId1) {
-          relType.getNameInReverseDirection
-        } else {
-//          throw new OmException("Unrelated parent entity parameter?: '" + relatedEntityIn.get.getId + "', '" + relatedEntityIn.get.getName + "'")
-          throw new OmException("Unrelated parent entity parameter?: '" + relatedEntity.getId + "', '" + relatedEntity.getName + "'")
-        }
-//      } else {
-//        relType.getName
-//      }
+      if (relatedEntity.getId == mEntityId2) {
+        relType.getName
+      } else if (relatedEntity.getId == mEntityId1) {
+        relType.getNameInReverseDirection
+      } else {
+        throw new OmException("Unrelated parent entity parameter?: '" + relatedEntity.getId + "', '" + relatedEntity.getName + "'")
+      }
     }
 
     // (See method comment about the relatedEntityIn param.)

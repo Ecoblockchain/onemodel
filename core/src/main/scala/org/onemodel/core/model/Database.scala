@@ -1,8 +1,8 @@
 /*  This file is part of OneModel, a program to manage knowledge.
-    Copyright in each year of 2016-2016 inclusive, Luke A. Call; all rights reserved.
+    Copyright in each year of 2016-2017 inclusive, Luke A. Call; all rights reserved.
     OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
-    distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
-    of the License, or (at your option) any later version.  See the file LICENSE for details.
+    distribution, and the GNU Affero General Public License as published by the Free Software Foundation.
+    See the file LICENSE for license version and details.
     OneModel is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
     You should have received a copy of the GNU Affero General Public License along with OneModel.  If not, see <http://www.gnu.org/licenses/>
@@ -15,6 +15,8 @@ import scala.collection.mutable
 
 object Database {
   val dbNamePrefix = "om_"
+  // If next line ever changes, search the code for other places that also have it hard-coded, to change also
+  // (e.g., INSTALLING, first.exp or its successors, any .psql scripts, ....
   val TEST_USER: String = "testrunner"
   val MIXED_CLASSES_EXCEPTION = "All the entities in a group should be of the same class."
   // so named to make it unlikely to collide by name with anything else:
@@ -72,6 +74,7 @@ object Database {
       case Util.FILE_TYPE => 4
       case Util.TEXT_TYPE => 5
       case Util.RELATION_TO_LOCAL_ENTITY_TYPE => 6
+      case "RelationToLocalEntity" => 6
       case Util.RELATION_TO_GROUP_TYPE => 7
       case Util.RELATION_TO_REMOTE_ENTITY_TYPE => 8
       case _ => throw new OmDatabaseException("unexpected")
@@ -216,6 +219,7 @@ abstract class Database {
   protected[model] def relationToRemoteEntityKeyExists(idIn: Long): Boolean
   protected[model] def relationToRemoteEntityKeysExistAndMatch(idIn: Long, relTypeIdIn: Long, entityId1In: Long, remoteInstanceIdIn: String, entityId2In: Long): Boolean
   protected[model] def getRelationToLocalEntityData(relTypeIdIn: Long, entityId1In: Long, entityId2In: Long): Array[Option[Any]]
+  protected[model] def getRelationToLocalEntityDataById(idIn: Long): Array[Option[Any]]
   protected[model] def getRelationToRemoteEntityData(relTypeIdIn: Long, entityId1In: Long, remoteInstanceIdIn: String, entityId2In: Long): Array[Option[Any]]
   protected[model] def getGroupData(idIn: Long): Array[Option[Any]]
   protected[model] def getGroupEntryObjects(groupIdIn: Long, startingObjectIndexIn: Long, maxValsIn: Option[Long] = None): java.util.ArrayList[Entity]
@@ -224,7 +228,8 @@ abstract class Database {
   protected[model] def getRelationToGroupDataByKeys(entityId: Long, relTypeId: Long, groupId: Long): Array[Option[Any]]
   protected[model] def getRelationToGroupData(idIn: Long): Array[Option[Any]]
   def getGroupEntriesData(groupIdIn: Long, limitIn: Option[Long] = None, includeArchivedEntitiesIn: Boolean = true): List[Array[Option[Any]]]
-  protected[model] def findRelationToAndGroup_OnEntity(entityIdIn: Long, groupNameIn: Option[String] = None): (Option[Long], Option[Long], Option[Long], Boolean)
+  protected[model] def findRelationToAndGroup_OnEntity(entityIdIn: Long,
+                                                       groupNameIn: Option[String] = None): (Option[Long], Option[Long], Option[Long], Option[String], Boolean)
   def getEntitiesContainingGroup(groupIdIn: Long, startingIndexIn: Long, maxValsIn: Option[Long] = None): java.util.ArrayList[(Long, Entity)]
   protected[model] def getCountOfEntitiesContainingGroup(groupIdIn: Long): (Long, Long)
   protected[model] def getClassData(idIn: Long): Array[Option[Any]]
@@ -235,7 +240,7 @@ abstract class Database {
   protected[model] def getClassName(idIn: Long): Option[String]
   protected[model] def getOmInstanceData(idIn: String): Array[Option[Any]]
   protected[model] def isDuplicateOmInstanceAddress(addressIn: String, selfIdToIgnoreIn: Option[String] = None): Boolean
-  protected[model] def getGroupsContainingEntitysGroupsIds(groupIdIn: Long, limitIn: Option[Long] = Some(5)): List[Array[Option[Any]]]
+  protected[model] def  getGroupsContainingEntitysGroupsIds(groupIdIn: Long, limitIn: Option[Long] = Some(5)): List[Array[Option[Any]]]
   protected[model] def isEntityInGroup(groupIdIn: Long, entityIdIn: Long): Boolean
   protected[model] def getAdjacentGroupEntriesSortingIndexes(groupIdIn: Long, sortingIndexIn: Long, limitIn: Option[Long] = None,
                                             forwardNotBackIn: Boolean): List[Array[Option[Any]]]
@@ -251,7 +256,6 @@ abstract class Database {
   protected[model] def findUnusedGroupSortingIndex(groupIdIn: Long, startingWithIn: Option[Long] = None): Long
   protected[model] def getTextAttributeByTypeId(parentEntityIdIn: Long, typeIdIn: Long, expectedRows: Option[Int] = None): java.util.ArrayList[TextAttribute]
   protected[model] def getLocalEntitiesContainingLocalEntity(entityIdIn: Long, startingIndexIn: Long, maxValsIn: Option[Long] = None): java.util.ArrayList[(Long, Entity)]
-  //%%idea, mbe next commit: sort the protected ones together for reading? Mbe also reformat this file?  Also rename "parent" in most places to "entity" or not?
   protected[model] def getCountOfGroupsContainingEntity(entityIdIn: Long): Long
   protected[model] def getContainingGroupsIds(entityIdIn: Long): java.util.ArrayList[Long]
   protected[model] def getContainingRelationsToGroup(entityIdIn: Long, startingIndexIn: Long,
@@ -320,7 +324,7 @@ abstract class Database {
   protected[model] def moveLocalEntityFromGroupToGroup(fromGroupIdIn: Long, toGroupIdIn: Long, moveEntityIdIn: Long, sortingIndexIn: Long)
   protected[model] def renumberSortingIndexes(entityIdOrGroupIdIn: Long, callerManagesTransactionsIn: Boolean = false,
                                               isEntityAttrsNotGroupEntries: Boolean = true)
-  protected[model] def updateAttributeSorting(entityIdIn: Long, attributeFormIdIn: Long, attributeIdIn: Long, sortingIndexIn: Long)
+  protected[model] def updateAttributeSortingIndex(entityIdIn: Long, attributeFormIdIn: Long, attributeIdIn: Long, sortingIndexIn: Long)
   protected[model] def updateSortingIndexInAGroup(groupIdIn: Long, entityIdIn: Long, sortingIndexIn: Long)
   protected[model] def updateEntityOnlyName(idIn: Long, nameIn: String)
   protected[model] def updateRelationType(idIn: Long, nameIn: String, nameInReverseDirectionIn: String, directionalityIn: String)

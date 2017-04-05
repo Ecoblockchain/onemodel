@@ -1,9 +1,9 @@
 /*  This file is part of OneModel, a program to manage knowledge.
-    Copyright in each year of 2003-2004 and 2008-2016 inclusive, Luke A. Call; all rights reserved.
-    (That copyright statement was previously 2013-2015, until I remembered that much of Controller came from TextUI.scala, and TextUI.java before that.)
+    Copyright in each year of 2003-2004 and 2008-2017 inclusive, Luke A. Call; all rights reserved.
+    (That copyright statement once said 2013-2015, until I remembered that much of Controller came from TextUI.scala, and TextUI.java before that.)
     OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
-    distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
-    of the License, or (at your option) any later version.  See the file LICENSE for details.
+    distribution, and the GNU Affero General Public License as published by the Free Software Foundation.
+    See the file LICENSE for license version and details.
     OneModel is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
     You should have received a copy of the GNU Affero General Public License along with OneModel.  If not, see <http://www.gnu.org/licenses/>
@@ -35,6 +35,8 @@ import scala.collection.mutable.ArrayBuffer
   */
 class Controller(ui: TextUI, forceUserPassPromptIn: Boolean = false, defaultUsernameIn: Option[String] = None, defaultPasswordIn: Option[String] = None) {
   //idea: get more scala familiarity then change this so it has limited visibility/scope: like, protected (subclass instances) + ImportExportTest.
+  // This should *not* be passed around as a parameter to everything, but rather those places in the code should get the DB instance from the
+  // entity etc that they are processing.
   private val localDb: Database = tryLogins(forceUserPassPromptIn, defaultUsernameIn, defaultPasswordIn)
 
   /** Returns the id and the entity, if they are available from the preferences lookup (id) and then finding that in the db (Entity). */
@@ -42,7 +44,7 @@ class Controller(ui: TextUI, forceUserPassPromptIn: Boolean = false, defaultUser
     if (defaultDisplayEntityId.isEmpty || ! localDb.entityKeyExists(defaultDisplayEntityId.get)) {
       None
     } else {
-      val entity: Option[Entity] = Entity.getEntityById(localDb, defaultDisplayEntityId.get)
+      val entity: Option[Entity] = Entity.getEntity(localDb, defaultDisplayEntityId.get)
       if (entity.isDefined && entity.get.isArchived) {
         val msg = "The default entity " + TextUI.NEWLN + "    " + entity.get.getId + ": \"" + entity.get.getName + "\"" + TextUI.NEWLN +
                   "... was found but is archived.  You might run" +
@@ -108,8 +110,10 @@ class Controller(ui: TextUI, forceUserPassPromptIn: Boolean = false, defaultUser
         // try logging in with some obtainable default values first, to save user the trouble, like if pwd is blank
         val (defaultUserName, defaultPassword) = Util.getDefaultUserInfo
         val dbWithSystemNameBlankPwd = Database.login(defaultUserName, defaultPassword, showError = false)
-        if (dbWithSystemNameBlankPwd.isDefined) dbWithSystemNameBlankPwd
-        else {
+        if (dbWithSystemNameBlankPwd.isDefined) {
+          ui.displayText("(Using default user info...)", waitForKeystrokeIn = false)
+          dbWithSystemNameBlankPwd
+        } else {
           val usrOpt = ui.askForString(Some(Array("Username")), None, Some(defaultUserName))
           if (usrOpt.isEmpty) System.exit(1)
           val dbConnectedWithBlankPwd = Database.login(usrOpt.get, defaultPassword, showError = false)
@@ -336,6 +340,7 @@ class Controller(ui: TextUI, forceUserPassPromptIn: Boolean = false, defaultUser
   def askForAndWriteClassAndTemplateEntityName(dbIn: Database, classIn: Option[EntityClass] = None): Option[(Long, Long)] = {
     if (classIn.isDefined) {
       // dbIn is required even if classIn is not provided, but if classIn is provided, make sure things are in order:
+      // (Idea:  does scala do a deep equals so it is valid?  also tracked in tasks.)
       require(classIn.get.mDB == dbIn)
     }
     val createNotUpdate: Boolean = classIn.isEmpty
@@ -446,22 +451,29 @@ class Controller(ui: TextUI, forceUserPassPromptIn: Boolean = false, defaultUser
      methods.
      Need to learn more scala so I can do the equivalent of passing a Tuple without specifying the size in signatures?
    */
+  /**
+   * @return true if the user made a desired change, false if they just want out.
+   */
   def askForInfoAndUpdateAttribute[T <: AttributeDataHolder](dbIn: Database, dhIn: T, askForAttrTypeId: Boolean, attrType: String,
                                                              promptForSelectingTypeId: String,
                                                              getOtherInfoFromUser: (Database, T, Boolean, TextUI) => Option[T],
-                                                             updateTypedAttribute: (T) => Unit) {
+                                                             updateTypedAttribute: (T) => Unit): Boolean = {
     //IF ADDING ANY OPTIONAL PARAMETERS, be sure they are also passed along in the recursive call(s) within this method, below!
-    @tailrec def askForInfoAndUpdateAttribute_helper(dhIn: T, attrType: String, promptForTypeId: String) {
+    @tailrec def askForInfoAndUpdateAttribute_helper(dhIn: T, attrType: String, promptForTypeId: String): Boolean = {
       val ans: Option[T] = askForAttributeData[T](dbIn, dhIn, askForAttrTypeId, attrType, Some(promptForTypeId),
                                                   Some(new Entity(dbIn, dhIn.attrTypeId).getName),
                                                   Some(dhIn.attrTypeId), getOtherInfoFromUser, editingIn = true)
-      if (ans.isDefined) {
+      if (ans.isEmpty) {
+        false
+      } else {
         val dhOut: T = ans.get
         val ans2: Option[Int] = Util.promptWhetherTo1Add2Correct(attrType, ui)
 
-        if (ans2.isEmpty) Unit
-        else if (ans2.get == 1) {
+        if (ans2.isEmpty) {
+          false
+        } else if (ans2.get == 1) {
           updateTypedAttribute(dhOut)
+          true
         }
         else if (ans2.get == 2) askForInfoAndUpdateAttribute_helper(dhOut, attrType, promptForTypeId)
         else throw new Exception("unexpected result! should never get here")
@@ -676,12 +688,12 @@ class Controller(ui: TextUI, forceUserPassPromptIn: Boolean = false, defaultUser
         if (editedEntity.isDefined) {
           val entityNameAfterEdit: String = editedEntity.get.getName
           if (entityNameBeforeEdit != entityNameAfterEdit) {
-            val (_, _, groupId, moreThanOneAvailable) = editedEntity.get.findRelationToAndGroup
+            val (_, _, groupId, groupName, moreThanOneAvailable) = editedEntity.get.findRelationToAndGroup
             if (groupId.isDefined && !moreThanOneAvailable) {
               val attrCount = entityIn.getAttributeCount
               // for efficiency, if it's obvious which subgroup's name to change at the same time, offer to do so
               val defaultAnswer = if (attrCount > 1) Some("n") else Some("y")
-              val ans = ui.askYesNoQuestion("There's a single subgroup" +
+              val ans = ui.askYesNoQuestion("There's a single subgroup named \"" + groupName + "\"" +
                                             (if (attrCount > 1) " (***AMONG " + (attrCount - 1) + " OTHER ATTRIBUTES***)" else "") +
                                             "; possibly it and this entity were created at the same time.  Also change" +
                                             " the subgroup's name now to be identical?", defaultAnswer)
@@ -1399,7 +1411,7 @@ class Controller(ui: TextUI, forceUserPassPromptIn: Boolean = false, defaultUser
 
   def goToEntityOrItsSoleGroupsMenu(userSelection: Entity, relationToGroupIn: Option[RelationToGroup] = None,
                                     containingGroupIn: Option[Group] = None): (Option[Entity], Option[Long], Boolean) = {
-    val (rtgid, rtid, groupId, moreThanOneAvailable) = userSelection.findRelationToAndGroup
+    val (rtgid, rtid, groupId, _, moreThanOneAvailable) = userSelection.findRelationToAndGroup
     val subEntitySelected: Option[Entity] = None
     if (groupId.isDefined && !moreThanOneAvailable && userSelection.getAttributeCount == 1) {
       // In quick menu, for efficiency of some work like brainstorming, if it's obvious which subgroup to go to, just go there.
@@ -1437,7 +1449,7 @@ class Controller(ui: TextUI, forceUserPassPromptIn: Boolean = false, defaultUser
       val numGroups: Long = entityIn.getRelationToGroupCount
       if (numGroups != 1) false
       else {
-        val (_, _, gid: Option[Long], moreAvailable) = entityIn.findRelationToAndGroup
+        val (_, _, gid: Option[Long], _, moreAvailable) = entityIn.findRelationToAndGroup
         if (gid.isEmpty || moreAvailable) throw new OmException("Found " + (if (gid.isEmpty) 0 else ">1") + " but by the earlier checks, " +
                                                                         "there should be exactly one group in entity " + entityIn.getId + " .")
         val groupSize = entityIn.mDB.getGroupSize(gid.get, 1)
@@ -1729,14 +1741,19 @@ class Controller(ui: TextUI, forceUserPassPromptIn: Boolean = false, defaultUser
     }
   }
 
-  def defaultAttributeCopying(entityIn: Entity, attributeTuplesIn: Option[Array[(Long, Attribute)]] = None): Unit = {
-    if (shouldTryAddingDefaultAttributes(entityIn)) {
+  def defaultAttributeCopying(targetEntityIn: Entity, attributeTuplesIn: Option[Array[(Long, Attribute)]] = None): Unit = {
+    if (shouldTryAddingDefaultAttributes(targetEntityIn)) {
       val attributeTuples: Array[(Long, Attribute)] = {
         if (attributeTuplesIn.isDefined) attributeTuplesIn.get
-        else entityIn.getSortedAttributes(onlyPublicEntitiesIn = false)._1
+        else targetEntityIn.getSortedAttributes(onlyPublicEntitiesIn = false)._1
       }
-      val templateAttributesToCopy: ArrayBuffer[Attribute] = getMissingAttributes(Some(entityIn), attributeTuples)
-      copyAndEditAttributes(entityIn, templateAttributesToCopy)
+      val templateEntity: Option[Entity] = {
+        val templateId: Option[Long] = targetEntityIn.getClassTemplateEntityId
+        if (templateId.isEmpty) None
+        else Some(new Entity(targetEntityIn.mDB, templateId.get))
+      }
+      val templateAttributesToCopy: ArrayBuffer[Attribute] = getMissingAttributes(templateEntity, attributeTuples)
+      copyAndEditAttributes(targetEntityIn, templateAttributesToCopy)
     }
   }
 
@@ -1759,6 +1776,8 @@ class Controller(ui: TextUI, forceUserPassPromptIn: Boolean = false, defaultUser
       escCounterLocal
     }
 
+    var askAboutRteEveryTime: Option[Boolean] = None
+    var (allCopy: Boolean, allCreateOrSearch: Boolean, allKeepReference: Boolean) = (false, false, false)
     var attrCounter = 0
     for (attributeFromTemplate: Attribute <- templateAttributesToCopyIn) {
       attrCounter += 1
@@ -1766,7 +1785,8 @@ class Controller(ui: TextUI, forceUserPassPromptIn: Boolean = false, defaultUser
         val waitForKeystroke: Boolean = {
           attributeFromTemplate match {
             case a: RelationToLocalEntity => true
-            case a: RelationToRemoteEntity => true
+            case a: RelationToRemoteEntity =>
+              true
             case _ => false
           }
         }
@@ -1795,9 +1815,13 @@ class Controller(ui: TextUI, forceUserPassPromptIn: Boolean = false, defaultUser
               promptToEditAttributeCopy()
               Some(entityIn.addTextAttribute(templateAttribute.getAttrTypeId, templateAttribute.getText, Some(templateAttribute.getSortingIndex)))
             case templateAttribute: RelationToLocalEntity =>
-              copyAndEditRelationToEntity(entityIn, templateAttribute)
+              val (newRTE, askEveryTime) = copyAndEditRelationToEntity(entityIn, templateAttribute, askAboutRteEveryTime)
+              askAboutRteEveryTime = askEveryTime
+              newRTE
             case templateAttribute: RelationToRemoteEntity =>
-              copyAndEditRelationToEntity(entityIn, templateAttribute)
+              val (newRTE, askEveryTime) = copyAndEditRelationToEntity(entityIn, templateAttribute, askAboutRteEveryTime)
+              askAboutRteEveryTime = askEveryTime
+              newRTE
             case templateAttribute: RelationToGroup =>
               promptToEditAttributeCopy()
               val templateGroup = templateAttribute.getGroup
@@ -1824,156 +1848,159 @@ class Controller(ui: TextUI, forceUserPassPromptIn: Boolean = false, defaultUser
         }
       }
     }
-  }
+    def copyAndEditRelationToEntity(entityIn: Entity, relationToEntityAttributeFromTemplateIn: Attribute,
+                                    askEveryTimeIn: Option[Boolean] = None): (Option[Attribute], Option[Boolean]) = {
+      require(relationToEntityAttributeFromTemplateIn.isInstanceOf[RelationToLocalEntity] ||
+              relationToEntityAttributeFromTemplateIn.isInstanceOf[RelationToRemoteEntity])
+      val choice1text = "Copy the template entity, editing its name (**MOST LIKELY CHOICE)"
+      val copyFromTemplateAndEditNameChoiceNum = 1
+      val choice2text = "Create a new entity or search for an existing one for this purpose"
+      val createOrSearchForEntityChoiceNum = 2
+      val choice3text = "Keep a reference to the same entity as in the template (least likely choice)"
+      val keepSameReferenceAsInTemplateChoiceNum = 3
 
-  def copyAndEditRelationToEntity(entityIn: Entity, relationToEntityAttributeFromTemplateIn: Attribute): Option[Attribute] = {
-    require(relationToEntityAttributeFromTemplateIn.isInstanceOf[RelationToLocalEntity] ||
-            relationToEntityAttributeFromTemplateIn.isInstanceOf[RelationToRemoteEntity])
-    val choice1text = "Copy the template entity, editing its name (**MOST LIKELY CHOICE)"
-    val copyFromTemplateAndEditNameChoiceNum = 1
-    val choice2text = "Create a new entity or search for an existing one for this purpose"
-    val createOrSearchForEntityChoiceNum = 2
-    val choice3text = "Keep a reference to the same entity as in the template (least likely choice)"
-    val keepSameReferenceAsInTemplateChoiceNum = 3
-
-    var (allCopy: Boolean, allCreateOrSearch: Boolean, allKeepReference: Boolean) = (false, false, false)
-    var askEveryTime: Option[Boolean] = None
-
-    askEveryTime = {
-      if (askEveryTime.isDefined) {
-        askEveryTime
-      } else {
-        val howRTEsLeadingText: Array[String] = Array("The template has relations to entities.  How would you like the equivalent to be provided" +
-                                                      " for this new entity being created?")
-        val howHandleRTEsChoices = Array[String]("For ALL entity relations being added: " + choice1text,
-                                                 "For ALL entity relations being added: " + choice2text,
-                                                 "For ALL entity relations being added: " + choice3text,
-                                                 "Ask for each relation to entity being created from the template")
-        val howHandleRTEsResponse = ui.askWhich(Some(howRTEsLeadingText), howHandleRTEsChoices)
-        if (howHandleRTEsResponse.isDefined) {
-          if (howHandleRTEsResponse.get == 1) {
-            allCopy = true
-            Some(false)
-          } else if (howHandleRTEsResponse.get == 2) {
-            allCreateOrSearch = true
-            Some(false)
-          } else if (howHandleRTEsResponse.get == 3) {
-            allKeepReference = true
-            Some(false)
-          } else if (howHandleRTEsResponse.get == 4) {
-            Some(true)
+      var askEveryTime: Option[Boolean] = None
+      askEveryTime = {
+        if (askEveryTimeIn.isDefined) {
+          askEveryTimeIn
+        } else {
+          val howRTEsLeadingText: Array[String] = Array("The template has relations to entities.  How would you like the equivalent to be provided" +
+                                                        " for this new entity being created?")
+          val howHandleRTEsChoices = Array[String]("For ALL entity relations being added: " + choice1text,
+                                                   "For ALL entity relations being added: " + choice2text,
+                                                   "For ALL entity relations being added: " + choice3text,
+                                                   "Ask for each relation to entity being created from the template")
+          val howHandleRTEsResponse = ui.askWhich(Some(howRTEsLeadingText), howHandleRTEsChoices)
+          if (howHandleRTEsResponse.isDefined) {
+            if (howHandleRTEsResponse.get == 1) {
+              allCopy = true
+              Some(false)
+            } else if (howHandleRTEsResponse.get == 2) {
+              allCreateOrSearch = true
+              Some(false)
+            } else if (howHandleRTEsResponse.get == 3) {
+              allKeepReference = true
+              Some(false)
+            } else if (howHandleRTEsResponse.get == 4) {
+              Some(true)
+            } else {
+              ui.displayText("Unexpected answer: " + howHandleRTEsResponse.get)
+              None
+            }
           } else {
-            ui.displayText("Unexpected answer: " + howHandleRTEsResponse.get)
             None
           }
-        } else {
-          None
         }
       }
-    }
-    if (askEveryTime.isEmpty) {
-      None
-    } else {
-      val howCopyRteResponse: Option[Int] = {
-        if (askEveryTime.get) {
-          val whichRteLeadingText: Array[String] = Array("The template has a templateAttribute which is a relation to an entity named \"" +
-                                                         relationToEntityAttributeFromTemplateIn.getDisplayString(0, None, None, simplify = true) +
-                                                         "\": how would you like the equivalent to be provided for this new entity being created?" +
-                                                         " (0/ESC to just skip this one for now)")
-          val whichRTEChoices = Array[String](choice1text, choice2text, choice3text)
-          ui.askWhich(Some(whichRteLeadingText), whichRTEChoices)
-        } else {
-          None
-        }
-      }
-      if (askEveryTime.get && howCopyRteResponse.isEmpty) {
-        None
+      if (askEveryTime.isEmpty) {
+        (None, askEveryTime)
       } else {
-        val relatedId2: Long = {
-          //noinspection TypeCheckCanBeMatch
-          if (relationToEntityAttributeFromTemplateIn.isInstanceOf[RelationToRemoteEntity]) {
-            relationToEntityAttributeFromTemplateIn.asInstanceOf[RelationToRemoteEntity].getRelatedId2
+        val howCopyRteResponse: Option[Int] = {
+          if (askEveryTime.get) {
+            val whichRteLeadingText: Array[String] = Array("The template has a templateAttribute which is a relation to an entity named \"" +
+                                                           relationToEntityAttributeFromTemplateIn.getDisplayString(0, None, None, simplify = true) +
+                                                           "\": how would you like the equivalent to be provided for this new entity being created?" +
+                                                           " (0/ESC to just skip this one for now)")
+            val whichRTEChoices = Array[String](choice1text, choice2text, choice3text)
+            ui.askWhich(Some(whichRteLeadingText), whichRTEChoices)
           } else {
-            relationToEntityAttributeFromTemplateIn.asInstanceOf[RelationToRemoteEntity].getRelatedId2
+            None
           }
         }
+        if (askEveryTime.get && howCopyRteResponse.isEmpty) {
+          (None, askEveryTime)
+        } else {
+          val relatedId2: Long = {
+            //noinspection TypeCheckCanBeMatch
+            if (relationToEntityAttributeFromTemplateIn.isInstanceOf[RelationToRemoteEntity]) {
+              relationToEntityAttributeFromTemplateIn.asInstanceOf[RelationToRemoteEntity].getRelatedId2
+            } else if (relationToEntityAttributeFromTemplateIn.isInstanceOf[RelationToLocalEntity]) {
+              relationToEntityAttributeFromTemplateIn.asInstanceOf[RelationToLocalEntity].getRelatedId2
+            } else {
+              throw new OmException("Unexpected type: " + relationToEntityAttributeFromTemplateIn.getClass.getCanonicalName)
+            }
+          }
 
-        if (allCopy || (howCopyRteResponse.isDefined && howCopyRteResponse.get == copyFromTemplateAndEditNameChoiceNum)) {
-//          %%when debug: ck if all this works when template rte is an RTRE:
-          val currentOrRemoteDbForRelatedEntity = Database.currentOrRemoteDb(relationToEntityAttributeFromTemplateIn,
-                                                                             relationToEntityAttributeFromTemplateIn.mDB)
-          val templatesRelatedEntity: Entity = new Entity(currentOrRemoteDbForRelatedEntity, relatedId2)
-          val oldName: String = templatesRelatedEntity.getName
-          //%%when debug: ck if this works when template rte is an RTRE:
-          //%%confirm fixed, when debug: what about when templatesRelatedEntity.getClassId is *remote*: cant use it locally right? same 4 sortingindex: so, mbe one or more of these?:
-          val newEntity: Option[Entity] = {
-            if (relationToEntityAttributeFromTemplateIn.isInstanceOf[RelationToLocalEntity]) {
-              askForNameAndWriteEntity(entityIn.mDB, Util.ENTITY_TYPE, None, Some(oldName), None, None, templatesRelatedEntity.getClassId,
-                                       Some("EDIT THE " + "ENTITY NAME:"), duplicateNameProbablyOK = true)
-            } else if (relationToEntityAttributeFromTemplateIn.isInstanceOf[RelationToRemoteEntity]) {
-              val e = askForNameAndWriteEntity(entityIn.mDB, Util.ENTITY_TYPE, None, Some(oldName), None, None, None,
-                                       Some("EDIT THE ENTITY NAME:"), duplicateNameProbablyOK = true)
-              if (e.isDefined && templatesRelatedEntity.getClassId.isDefined) {
-                val remoteClassId: Long = templatesRelatedEntity.getClassId.get
-                //%%IN DEBUG: does the next line get the remote name ok?
-                val remoteClassName: String = new EntityClass(currentOrRemoteDbForRelatedEntity, remoteClassId).getName
-                ui.displayText("Note: Did not write a class on the new entity to match that from the remote entity, until some kind of synchronization " +
-                               "of classes across OM instances is in place.  (Idea: interim solution could be to match simply by name if " +
-                               "there is a match, with user confirmation, or user selection if multiple matches.  The class " +
-                               "in the remote instance is: " + remoteClassId + ": " + remoteClassName)
+          if (allCopy || (howCopyRteResponse.isDefined && howCopyRteResponse.get == copyFromTemplateAndEditNameChoiceNum)) {
+  //          %%when debug: ck if all this works when template rte is an RTRE:
+            val currentOrRemoteDbForRelatedEntity = Database.currentOrRemoteDb(relationToEntityAttributeFromTemplateIn,
+                                                                               relationToEntityAttributeFromTemplateIn.mDB)
+            val templatesRelatedEntity: Entity = new Entity(currentOrRemoteDbForRelatedEntity, relatedId2)
+            val oldName: String = templatesRelatedEntity.getName
+            //%%when debug: ck if this works when template rte is an RTRE:
+            //%%confirm fixed, when debug: what about when templatesRelatedEntity.getClassId is *remote*: cant use it locally right? same 4 sortingindex: so, mbe one or more of these?:
+            val newEntity: Option[Entity] = {
+              //noinspection TypeCheckCanBeMatch
+              if (relationToEntityAttributeFromTemplateIn.isInstanceOf[RelationToLocalEntity]) {
+                askForNameAndWriteEntity(entityIn.mDB, Util.ENTITY_TYPE, None, Some(oldName), None, None, templatesRelatedEntity.getClassId,
+                                         Some("EDIT THE " + "ENTITY NAME:"), duplicateNameProbablyOK = true)
+              } else if (relationToEntityAttributeFromTemplateIn.isInstanceOf[RelationToRemoteEntity]) {
+                val e = askForNameAndWriteEntity(entityIn.mDB, Util.ENTITY_TYPE, None, Some(oldName), None, None, None,
+                                         Some("EDIT THE ENTITY NAME:"), duplicateNameProbablyOK = true)
+                if (e.isDefined && templatesRelatedEntity.getClassId.isDefined) {
+                  val remoteClassId: Long = templatesRelatedEntity.getClassId.get
+                  //%%IN DEBUG: does the next line get the remote name ok?
+                  val remoteClassName: String = new EntityClass(currentOrRemoteDbForRelatedEntity, remoteClassId).getName
+                  ui.displayText("Note: Did not write a class on the new entity to match that from the remote entity, until some kind of synchronization " +
+                                 "of classes across OM instances is in place.  (Idea: interim solution could be to match simply by name if " +
+                                 "there is a match, with user confirmation, or user selection if multiple matches.  The class " +
+                                 "in the remote instance is: " + remoteClassId + ": " + remoteClassName)
+                }
+                e
+              } else throw new OmException("unexpected type: " + relationToEntityAttributeFromTemplateIn.getClass.getCanonicalName)
+            }
+            if (newEntity.isEmpty) {
+              (None, askEveryTime)
+            } else {
+              //%%when debug: ck if this works when template rte is an RTRE. It should create a local one as it is doing because the user chose "copy" opt.
+              newEntity.get.updateNewEntriesStickToTop(templatesRelatedEntity.getNewEntriesStickToTop)
+              val newRTLE = Some(entityIn.addRelationToLocalEntity(relationToEntityAttributeFromTemplateIn.getAttrTypeId, newEntity.get.getId,
+                                                     Some(relationToEntityAttributeFromTemplateIn.getSortingIndex)))
+              (newRTLE, askEveryTime)
+            }
+          } else if (allCreateOrSearch || (howCopyRteResponse.isDefined && howCopyRteResponse.get == createOrSearchForEntityChoiceNum)) {
+            //%%when debug: ck if this works when template rte is an RTRE:
+            val rteDh = new RelationToEntityDataHolder(relationToEntityAttributeFromTemplateIn.getAttrTypeId, None, System.currentTimeMillis(), 0, false, "")
+            val dh: Option[RelationToEntityDataHolder] = askForRelationEntityIdNumber2(entityIn.mDB, rteDh, inEditing = false, ui)
+            if (dh.isDefined) {
+  //            val relation = entityIn.addRelationToEntity(dh.get.attrTypeId, dh.get.entityId2, Some(relationToEntityAttributeFromTemplateIn.getSortingIndex),
+  //                                                        dh.get.validOnDate, dh.get.observationDate,
+  //                                                        dh.get.isRemote, if (!dh.get.isRemote) None else Some(dh.get.remoteInstanceId))
+              if (dh.get.isRemote) {
+                val rtre = entityIn.addRelationToRemoteEntity(dh.get.attrTypeId, dh.get.entityId2, Some(relationToEntityAttributeFromTemplateIn.getSortingIndex),
+                                                              dh.get.validOnDate, dh.get.observationDate, dh.get.remoteInstanceId)
+                (Some(rtre), askEveryTime)
+              } else {
+                val rtle = entityIn.addRelationToLocalEntity(dh.get.attrTypeId, dh.get.entityId2, Some(relationToEntityAttributeFromTemplateIn.getSortingIndex),
+                                                             dh.get.validOnDate, dh.get.observationDate)
+                (Some(rtle), askEveryTime)
               }
-              e
-            } else throw new OmException("unexpected type: " + relationToEntityAttributeFromTemplateIn.getClass.getCanonicalName)
-          }
-          if (newEntity.isEmpty) {
-            None
-          } else {
-            //%%when debug: con if this works when template rte is an RTRE. It should create a local one as it is doing because the user chose "copy" opt.
-            newEntity.get.updateNewEntriesStickToTop(templatesRelatedEntity.getNewEntriesStickToTop)
-            Some(entityIn.addRelationToLocalEntity(relationToEntityAttributeFromTemplateIn.getAttrTypeId, newEntity.get.getId,
-                                                   Some(relationToEntityAttributeFromTemplateIn.getSortingIndex)))
-          }
-        } else if (allCreateOrSearch || (howCopyRteResponse.isDefined && howCopyRteResponse.get == createOrSearchForEntityChoiceNum)) {
-          //%%when debug: ck if this works when template rte is an RTRE:
-          val rteDh = new RelationToEntityDataHolder(relationToEntityAttributeFromTemplateIn.getAttrTypeId, None, System.currentTimeMillis(), 0, false, "")
-          val dh: Option[RelationToEntityDataHolder] = askForRelationEntityIdNumber2(entityIn.mDB, rteDh, inEditing = false, ui)
-          if (dh.isDefined) {
-//            val relation = entityIn.addRelationToEntity(dh.get.attrTypeId, dh.get.entityId2, Some(relationToEntityAttributeFromTemplateIn.getSortingIndex),
-//                                                        dh.get.validOnDate, dh.get.observationDate,
-//                                                        dh.get.isRemote, if (!dh.get.isRemote) None else Some(dh.get.remoteInstanceId))
-            if (dh.get.isRemote) {
-              val rtre = entityIn.addRelationToRemoteEntity(dh.get.attrTypeId, dh.get.entityId2, Some(relationToEntityAttributeFromTemplateIn.getSortingIndex),
-                                                            dh.get.validOnDate, dh.get.observationDate, dh.get.remoteInstanceId)
-              Some(rtre)
             } else {
-              val rtle = entityIn.addRelationToLocalEntity(dh.get.attrTypeId, dh.get.entityId2, Some(relationToEntityAttributeFromTemplateIn.getSortingIndex),
-                                                           dh.get.validOnDate, dh.get.observationDate)
-              Some(rtle)
+              (None, askEveryTime)
             }
+          } else if (allKeepReference || (howCopyRteResponse.isDefined && howCopyRteResponse.get == keepSameReferenceAsInTemplateChoiceNum)) {
+            val relation = {
+              if (relationToEntityAttributeFromTemplateIn.mDB.isRemote) {
+                entityIn.addRelationToRemoteEntity(relationToEntityAttributeFromTemplateIn.getAttrTypeId, relatedId2,
+                                                   Some(relationToEntityAttributeFromTemplateIn.getSortingIndex), None, System.currentTimeMillis(),
+                                                   relationToEntityAttributeFromTemplateIn.asInstanceOf[RelationToRemoteEntity].getRemoteInstanceId)
+              } else {
+                entityIn.addRelationToLocalEntity(relationToEntityAttributeFromTemplateIn.getAttrTypeId, relatedId2,
+                                                  Some(relationToEntityAttributeFromTemplateIn.getSortingIndex), None, System.currentTimeMillis())
+              }
+            }
+            (Some(relation), askEveryTime)
           } else {
-            None
+            ui.displayText("Unexpected answer: " + allCopy + "/" + allCreateOrSearch + "/" + allKeepReference + "/" + askEveryTime.getOrElse(None) +
+                           howCopyRteResponse.getOrElse(None))
+            (None, askEveryTime)
           }
-        } else if (allKeepReference || (howCopyRteResponse.isDefined && howCopyRteResponse.get == keepSameReferenceAsInTemplateChoiceNum)) {
-          val relation = {
-            if (relationToEntityAttributeFromTemplateIn.mDB.isRemote) {
-              entityIn.addRelationToRemoteEntity(relationToEntityAttributeFromTemplateIn.getAttrTypeId, relatedId2,
-                                                 Some(relationToEntityAttributeFromTemplateIn.getSortingIndex), None, System.currentTimeMillis(),
-                                                 relationToEntityAttributeFromTemplateIn.asInstanceOf[RelationToRemoteEntity].getRemoteInstanceId)
-            } else {
-              entityIn.addRelationToLocalEntity(relationToEntityAttributeFromTemplateIn.getAttrTypeId, relatedId2,
-                                                Some(relationToEntityAttributeFromTemplateIn.getSortingIndex), None, System.currentTimeMillis())
-            }
-          }
-          Some(relation)
-        } else {
-          ui.displayText("Unexpected answer: " + howCopyRteResponse.get)
-          None
         }
       }
     }
   }
 
-  def getMissingAttributes(classTemplateEntityIn: Option[Entity], attributeTuplesIn: Array[(Long, Attribute)]): ArrayBuffer[Attribute] = {
+  def getMissingAttributes(classTemplateEntityIn: Option[Entity], existingAttributeTuplesIn: Array[(Long, Attribute)]): ArrayBuffer[Attribute] = {
     val templateAttributesToSuggestCopying: ArrayBuffer[Attribute] = {
       // This determines which attributes from the template entity (or "pattern" or "class-defining entity") are not found on this entity, so they can
       // be added if the user wishes.
@@ -1984,7 +2011,7 @@ class Controller(ui: TextUI, forceUserPassPromptIn: Boolean = false, defaultUser
         for (cde_attributeTuple <- cde_attributeTuples) {
           var attributeTypeFoundOnEntity = false
           val cde_attribute = cde_attributeTuple._2
-          for (attributeTuple <- attributeTuplesIn) {
+          for (attributeTuple <- existingAttributeTuplesIn) {
             if (!attributeTypeFoundOnEntity) {
               val cde_typeId: Long = cde_attribute.getAttrTypeId
               val typeId = attributeTuple._2.getAttrTypeId

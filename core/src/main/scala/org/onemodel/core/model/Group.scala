@@ -1,8 +1,8 @@
 /*  This file is part of OneModel, a program to manage knowledge.
-    Copyright in each year of 2014-2016 inclusive, Luke A. Call; all rights reserved.
+    Copyright in each year of 2014-2017 inclusive, Luke A. Call; all rights reserved.
     OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
-    distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
-    of the License, or (at your option) any later version.  See the file LICENSE for details.
+    distribution, and the GNU Affero General Public License as published by the Free Software Foundation.
+    See the file LICENSE for license version and details.
     OneModel is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
     You should have received a copy of the GNU Affero General Public License along with OneModel.  If not, see <http://www.gnu.org/licenses/>
@@ -14,7 +14,31 @@ package org.onemodel.core.model
 
 import org.onemodel.core.{Util, Color, OmException}
 
-/** See comments on similar methods in RelationToEntity (or maybe its subclasses). */
+object Group {
+  def createGroup(inDB: Database, inName: String, allowMixedClassesInGroupIn: Boolean = false): Group = {
+    val id: Long = inDB.createGroup(inName, allowMixedClassesInGroupIn)
+    new Group(inDB, id)
+  }
+
+  /** This is for times when you want None if it doesn't exist, instead of the exception thrown by the Entity constructor.  Or for convenience in tests.
+    */
+  def getGroup(inDB: Database, id: Long): Option[Group] = {
+    try Some(new Group(inDB, id))
+    catch {
+      case e: java.lang.Exception =>
+        //idea: see comment here in Entity.scala.
+        if (e.toString.indexOf(Util.DOES_NOT_EXIST) >= 0) {
+          None
+        }
+        else throw e
+    }
+  }
+}
+
+/** See comments on similar methods in RelationToEntity (or maybe its subclasses).
+  *
+  * Groups dont contain remote entities (only those at the same DB as the group is), so some logic doesn't have to be written for that.
+  * */
 class Group(val mDB: Database, mId: Long) {
   // (See comment in similar spot in BooleanAttribute for why not checking for exists, if mDB.isRemote.)
   if (!mDB.isRemote && !mDB.groupKeyExists(mId: Long)) {

@@ -1,0 +1,13 @@
+set -eux
+# A convenience script which has a shorter name and tries to show the logs for debugging.  
+# To work, the script om-expect-tests, part of the om source code, should be in the path, as should the om script itself.
+
+export SCRIPT_DIR="$(dirname $(readlink -e $0))"
+
+om-expect-tests
+
+echo "Enter to view log"; read
+less -p"found|ing proc" -J +G "$SCRIPT_DIR"/testrun.log
+echo "Enter to view debug log (more detailed)"; read
+less -p"found|ing proc" -J +G dbg.log
+

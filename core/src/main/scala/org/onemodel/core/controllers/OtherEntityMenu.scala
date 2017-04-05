@@ -1,8 +1,8 @@
 /*  This file is part of OneModel, a program to manage knowledge.
-    Copyright in each year of 2015-2016 inclusive, Luke A. Call; all rights reserved.
+    Copyright in each year of 2015-2017 inclusive, Luke A. Call; all rights reserved.
     OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
-    distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
-    of the License, or (at your option) any later version.  See the file LICENSE for details.
+    distribution, and the GNU Affero General Public License as published by the Free Software Foundation.
+    See the file LICENSE for license version and details.
     OneModel is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
     You should have received a copy of the GNU Affero General Public License along with OneModel.  If not, see <http://www.gnu.org/licenses/>
@@ -25,7 +25,8 @@ class OtherEntityMenu (val ui: TextUI, val controller: Controller) {
   def otherEntityMenu(entityIn: Entity, attributeRowsStartingIndexIn: Int = 0, relationSourceEntityIn: Option[Entity],
                       containingRelationToEntityIn: Option[AttributeWithValidAndObservedDates], containingGroupIn: Option[Group],
                       attributeTuplesIn: Array[(Long, Attribute)]) {
-    require(containingRelationToEntityIn.get.isInstanceOf[RelationToLocalEntity] || containingRelationToEntityIn.get.isInstanceOf[RelationToRemoteEntity])
+    require(containingRelationToEntityIn.isEmpty ||
+            containingRelationToEntityIn.get.isInstanceOf[RelationToLocalEntity] || containingRelationToEntityIn.get.isInstanceOf[RelationToRemoteEntity])
     try {
       require(entityIn != null)
       val leadingText = Array[String]{ Util.entityMenuLeadingText(entityIn) }
@@ -223,11 +224,11 @@ class OtherEntityMenu (val ui: TextUI, val controller: Controller) {
     val name = entityIn.getName
     val groupCount: Long = entityIn.getCountOfContainingGroups
     val affectedExamples = getExampleAffectedGroupsDescriptions(groupCount, entityIn)
-    val effectMsg =  "This will ALSO remove it from " + groupCount + " groups, including for example these relations " +
+    val effectMsg =  "This will ALSO remove it from " + groupCount + " groups, including for example these relations" +
                      " that refer to this entity (showing entities & their relations to groups, as \"entity -> group\"): " + affectedExamples
     // idea: WHEN CONSIDERING MODS TO THIS, ALSO CONSIDER THE Q'S ASKED AT CODE CMT WHERE DELETING A GROUP OF ENTITIES (SEE, for example "recursively").
     // (and in the other 2 methods just like this)
-    val warningMsg = "DELETE ENTITY \"" + name + "\" (and " + Util.entityPartsThatCanBeAffected + ").  " + effectMsg + "**ARE YOU REALLY SURE?**"
+    val warningMsg = "DELETE ENTITY \"" + name + "\" (and " + Util.entityPartsThatCanBeAffected + ").  " + effectMsg + "\n**ARE YOU REALLY SURE?**"
     val ans = ui.askYesNoQuestion(warningMsg, Some("n"))
     if (ans.isDefined && ans.get) {
       entityIn.delete()
@@ -245,11 +246,11 @@ class OtherEntityMenu (val ui: TextUI, val controller: Controller) {
     val name = entityIn.getName
     val groupCount: Long = entityIn.getCountOfContainingGroups
     val affectedExamples = getExampleAffectedGroupsDescriptions(groupCount, entityIn)
-    val effectMsg = "This will affect affect its visibility in " + groupCount + " groups, including for example these relations " +
+    val effectMsg = "This will affect affect its visibility in " + groupCount + " groups, including for example these relations" +
                     " that refer to this entity (showing entities & their relations to groups, as \"entity -> group\"): " + affectedExamples
     // idea: WHEN CONSIDERING MODS TO THIS, ALSO CONSIDER THE Q'S ASKED AT CODE CMT WHERE DELETING A GROUP OF ENTITIES (SEE, for example "recursively").
     // (and in the other 2 methods just like this)
-    val warningMsg = "ARCHIVE ENTITY \"" + name + "\" (and " + Util.entityPartsThatCanBeAffected + ").  " + effectMsg + "**ARE YOU REALLY SURE?**"
+    val warningMsg = "ARCHIVE ENTITY \"" + name + "\" (and " + Util.entityPartsThatCanBeAffected + ").  " + effectMsg + "\n**ARE YOU REALLY SURE?**"
     val ans = ui.askYesNoQuestion(warningMsg, Some(""))
     if (ans.isDefined && ans.get) {
       entityIn.archive()
@@ -267,7 +268,7 @@ class OtherEntityMenu (val ui: TextUI, val controller: Controller) {
     val name = entityIn.getName
     val groupCount: Long = entityIn.getCountOfContainingGroups
     val affectedExamples = getExampleAffectedGroupsDescriptions(groupCount, entityIn)
-    val effectMsg = "This will affect affect its visibility in " + groupCount + " groups, including for example these relations " +
+    val effectMsg = "This will affect affect its visibility in " + groupCount + " groups, including for example these relations" +
                     " that refer to this entity (showing entities & their relations to groups, as \"entity -> group\"): " + affectedExamples
     // idea: WHEN CONSIDERING MODS TO THIS, ALSO CONSIDER THE Q'S ASKED AT CODE CMT WHERE DELETING A GROUP OF ENTITIES (SEE, for example "recursively").
     // (and in the other 2 methods just like this)
@@ -364,7 +365,7 @@ class OtherEntityMenu (val ui: TextUI, val controller: Controller) {
     // (This value is an Option so that if None, it tells the program that the user wants out. The others haven't been set up that way (yet?).)
     val footerContent: Option[String] = {
       val savedAttrText: Option[String] = {
-        if (headerTypeIds.size > 0) {
+        if (footerTypeIds.size > 0) {
           getAttrText(entityIn, footerTypeIds.get(0))
         } else {
           None
@@ -391,7 +392,7 @@ class OtherEntityMenu (val ui: TextUI, val controller: Controller) {
   def goToRelatedPlaces(entityIn: Entity, relationSourceEntityIn: Option[Entity] = None,
                         relationIn: Option[AttributeWithValidAndObservedDates] = None, templateEntityId: Option[Long]) {
     //idea: make this and similar locations share code? What other places could?? There is plenty of duplicated code here!
-    require(relationIn.get.isInstanceOf[RelationToLocalEntity] || relationIn.get.isInstanceOf[RelationToRemoteEntity])
+    require(relationIn.isEmpty || relationIn.get.isInstanceOf[RelationToLocalEntity] || relationIn.get.isInstanceOf[RelationToRemoteEntity])
     val leadingText = Some(Array("Go to..."))
     val seeContainingEntities_choiceNumber: Int = 1
     val seeContainingGroups_choiceNumber: Int = 2
@@ -400,7 +401,11 @@ class OtherEntityMenu (val ui: TextUI, val controller: Controller) {
     // The next 2 values are 3 & 4 in case the previous 2 are unused.  If the previous 2 are used, the next 2 will be += 2, below.
     var goToTemplateEntity_choiceNumber: Int = 3
     var goToClass_choiceNumber: Int = 4
-    val numContainingEntities = entityIn.getCountOfContainingLocalEntities
+    val numContainingEntities: Long = {
+      val (nonArchived, archived) = entityIn.getCountOfContainingLocalEntities
+      if (entityIn.mDB.includeArchivedEntities)  nonArchived + archived
+      else nonArchived
+    }
     // (idea: make this next call efficient: now it builds them all when we just want a count; but is infrequent & likely small numbers)
     val numContainingGroups = entityIn.getCountOfContainingGroups
     var containingGroup: Option[Group] = None
@@ -419,7 +424,7 @@ class OtherEntityMenu (val ui: TextUI, val controller: Controller) {
       }
     }
 
-    var choices = Array[String]("See entities that directly relate to this entity ( " + numContainingEntities + ")",
+    var choices = Array[String]("See entities that directly relate to this entity (" + numContainingEntities + ")",
                                 if (numContainingGroups == 1) {
                                   "Go to group containing this entity: " + containingGroup.get.getName
                                 } else {
@@ -486,12 +491,12 @@ class OtherEntityMenu (val ui: TextUI, val controller: Controller) {
           Some(inDH)
         }
         def updateRelationToEntity(dhInOut: RelationToEntityDataHolder) {
-          // This "if" exists only to get things to compile while limiting visibility of "RelationToEntity" (per comments on that class).
+          // This "if" exists only to get things to compile while limiting visibility of "RelationToEntity" (per comments in that class).
           //noinspection TypeCheckCanBeMatch
           if (relationIn.get.isInstanceOf[RelationToLocalEntity]) {
-            relationIn.get.asInstanceOf[RelationToLocalEntity].update(relationIn.get.getAttrTypeId, dhInOut.validOnDate, Some(dhInOut.observationDate), Some(dhInOut.attrTypeId))
+            relationIn.get.asInstanceOf[RelationToLocalEntity].update(dhInOut.validOnDate, Some(dhInOut.observationDate), Some(dhInOut.attrTypeId))
           } else if (relationIn.get.isInstanceOf[RelationToRemoteEntity]) {
-            relationIn.get.asInstanceOf[RelationToRemoteEntity].update(relationIn.get.getAttrTypeId, dhInOut.validOnDate, Some(dhInOut.observationDate), Some(dhInOut.attrTypeId))
+            relationIn.get.asInstanceOf[RelationToRemoteEntity].update(dhInOut.validOnDate, Some(dhInOut.observationDate), Some(dhInOut.attrTypeId))
           } else {
             throw new OmException("unexpected type: " + relationIn.getClass.getCanonicalName)
           }
@@ -599,7 +604,7 @@ class OtherEntityMenu (val ui: TextUI, val controller: Controller) {
    */
   def askWhetherDeleteOrArchiveEtc(entityIn: Entity, relationIn: Option[AttributeWithValidAndObservedDates], relationSourceEntityIn: Option[Entity],
                                    containingGroupIn: Option[Group]): (Option[Int], Int, Int, Int) = {
-    require(relationIn.get.isInstanceOf[RelationToLocalEntity] || relationIn.get.isInstanceOf[RelationToRemoteEntity])
+    require(relationIn.isEmpty || relationIn.get.isInstanceOf[RelationToLocalEntity] || relationIn.get.isInstanceOf[RelationToRemoteEntity])
 
     val groupCount: Long = entityIn.getCountOfContainingGroups
     val (entityCountNonArchived, entityCountArchived) = entityIn.getCountOfContainingLocalEntities

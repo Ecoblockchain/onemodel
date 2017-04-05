@@ -1,9 +1,9 @@
 /*  This file is part of OneModel, a program to manage knowledge.
-    Copyright in each year of 2003-2004 and 2008-2016 inclusive, Luke A. Call; all rights reserved.
+    Copyright in each year of 2003-2004 and 2008-2017 inclusive, Luke A. Call; all rights reserved.
     (That copyright statement was previously 2013-2015, until I remembered that much of Controller came from TextUI.scala and TextUI.java before that.)
     OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
-    distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
-    of the License, or (at your option) any later version.  See the file LICENSE for details.
+    distribution, and the GNU Affero General Public License as published by the Free Software Foundation.
+    See the file LICENSE for license version and details.
     OneModel is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
     You should have received a copy of the GNU Affero General Public License along with OneModel.  If not, see <http://www.gnu.org/licenses/>
@@ -50,7 +50,8 @@ class EntityMenu(override val ui: TextUI, val controller: Controller) extends So
                  //IF ADDING ANY OPTIONAL PARAMETERS, be sure they are also passed along in the recursive call(s) w/in this method!
                  containingRelationToEntityIn: Option[AttributeWithValidAndObservedDates] = None,
                  containingGroupIn: Option[Group] = None): Option[Entity] = try {
-    require(containingRelationToEntityIn.get.isInstanceOf[RelationToLocalEntity] || containingRelationToEntityIn.get.isInstanceOf[RelationToRemoteEntity])
+    require(containingRelationToEntityIn.isEmpty ||
+            containingRelationToEntityIn.get.isInstanceOf[RelationToLocalEntity] || containingRelationToEntityIn.get.isInstanceOf[RelationToRemoteEntity])
     require(entityIn != null)
     if (!entityIn.mDB.entityKeyExists(entityIn.getId, includeArchived = entityIn.mDB.includeArchivedEntities)) {
       ui.displayText("The desired entity, " + entityIn.getId + ", has been deleted or archived, probably while browsing other entities via menu options," +
@@ -60,11 +61,11 @@ class EntityMenu(override val ui: TextUI, val controller: Controller) extends So
     val (containingRelationToEntityIn_relatedId1: Option[Long], containingRelationToEntityIn_relatedId2: Option[Long]) = {
       if (containingRelationToEntityIn.isDefined) {
         if (containingRelationToEntityIn.get.isInstanceOf[RelationToRemoteEntity]) {
-          (Some(containingRelationToEntityIn.asInstanceOf[RelationToRemoteEntity].getRelatedId1),
-          Some(containingRelationToEntityIn.asInstanceOf[RelationToRemoteEntity].getRelatedId2))
+          val rtre = containingRelationToEntityIn.get.asInstanceOf[RelationToRemoteEntity]
+          (Some(rtre.getRelatedId1), Some(rtre.getRelatedId2))
         } else {
-          (Some(containingRelationToEntityIn.asInstanceOf[RelationToLocalEntity].getRelatedId1),
-          Some(containingRelationToEntityIn.asInstanceOf[RelationToLocalEntity].getRelatedId2))
+          val rtle = containingRelationToEntityIn.get.asInstanceOf[RelationToLocalEntity]
+          (Some(rtle.getRelatedId1), Some(rtle.getRelatedId2))
         }
       } else {
         (None, None)
@@ -330,7 +331,8 @@ class EntityMenu(override val ui: TextUI, val controller: Controller) extends So
                                      containingRelationToEntityIn: Option[AttributeWithValidAndObservedDates], containingGroupIn: Option[Group],
                                      attributeTuples: Array[(Long, Attribute)], attributesToDisplay: util.ArrayList[Attribute],
                                      answer: Int, choicesIndex: Int): Option[Entity] = {
-    require(containingRelationToEntityIn.get.isInstanceOf[RelationToLocalEntity] || containingRelationToEntityIn.get.isInstanceOf[RelationToRemoteEntity])
+    require(containingRelationToEntityIn.isEmpty ||
+            containingRelationToEntityIn.get.isInstanceOf[RelationToLocalEntity] || containingRelationToEntityIn.get.isInstanceOf[RelationToRemoteEntity])
     val entryIsGoneNow = {
       // user typed a letter to select an attribute (now 0-based)
       if (choicesIndex >= attributeTuples.length) {
@@ -384,7 +386,8 @@ class EntityMenu(override val ui: TextUI, val controller: Controller) extends So
   def entitySearchSubmenu(entityIn: Entity, attributeRowsStartingIndexIn: Int, containingRelationToEntityIn: Option[AttributeWithValidAndObservedDates],
                           containingGroupIn: Option[Group], numAttrsInEntity: Long, attributeTuples: Array[(Long, Attribute)],
                           highlightedEntry: Option[Attribute], targetForMoves: Option[Attribute], answer: Int) {
-    require(containingRelationToEntityIn.get.isInstanceOf[RelationToLocalEntity] || containingRelationToEntityIn.get.isInstanceOf[RelationToRemoteEntity])
+    require(containingRelationToEntityIn.isEmpty ||
+            containingRelationToEntityIn.get.isInstanceOf[RelationToLocalEntity] || containingRelationToEntityIn.get.isInstanceOf[RelationToRemoteEntity])
     val searchResponse = ui.askWhich(Some(Array("Choose a search option:")), Array(if (numAttrsInEntity > 0) Util.listNextItemsPrompt else "(stub)",
                                                                                    if (numAttrsInEntity > 0) Util.listPrevItemsPrompt else "(stub)",
                                                                                    "Search related entities",
@@ -483,7 +486,8 @@ class EntityMenu(override val ui: TextUI, val controller: Controller) extends So
                         relationSourceEntityIn: Option[Entity] = None,
                         containingRelationToEntityIn: Option[AttributeWithValidAndObservedDates] = None,
                         containingGroupIn: Option[Group] = None): (Int, Boolean) = {
-    require(containingRelationToEntityIn.get.isInstanceOf[RelationToLocalEntity] || containingRelationToEntityIn.get.isInstanceOf[RelationToRemoteEntity])
+    require(containingRelationToEntityIn.isEmpty ||
+            containingRelationToEntityIn.get.isInstanceOf[RelationToLocalEntity] || containingRelationToEntityIn.get.isInstanceOf[RelationToRemoteEntity])
 
     if (relationSourceEntityIn.isDefined || containingRelationToEntityIn.isDefined) {
       require(relationSourceEntityIn.isDefined && containingRelationToEntityIn.isDefined,
@@ -573,7 +577,7 @@ class EntityMenu(override val ui: TextUI, val controller: Controller) extends So
             movingRtg.move(newContainingEntityId, getSortingIndex(entityIn.mDB, entityIn.getId, movingRtg.getFormId, movingRtg.getId))
             (startingDisplayRowIndexIn, true)
           } else if (highlightedAttributeIn.isInstanceOf[RelationToGroup] && targetForMovesIn.get.isInstanceOf[RelationToGroup]) {
-            ui.displayText("Can't do this: groups can't directly contain groups.  But groups can contain entities, and entities can contain groups and" +
+            ui.displayText("Unsupported: groups can't directly contain groups.  But groups can contain entities, and entities can contain groups and" +
                            " other attributes. [1]")
             (startingDisplayRowIndexIn, false)
           } else {
@@ -630,7 +634,7 @@ class EntityMenu(override val ui: TextUI, val controller: Controller) extends So
                              " to remote entities (currently at least).")
               (startingDisplayRowIndexIn, false)
             } else if (highlightedAttributeIn.isInstanceOf[RelationToGroup]) {
-              ui.displayText("Can't do this: groups can't directly contain groups or relations to remote entities.  But groups can contain entities, " +
+              ui.displayText("Unsupported: groups can't directly contain groups or relations to remote entities.  But groups can contain entities, " +
                              "and entities can contain groups and other attributes. [2]")
               (startingDisplayRowIndexIn, false)
             } else throw new OmException("Should be impossible to get here: I thought I checked for ok values, above. [2]")
@@ -769,12 +773,12 @@ class EntityMenu(override val ui: TextUI, val controller: Controller) extends So
 
   protected def updateSortedEntry(dbIn: Database, entityIdIn: Long, movingAttributeFormIdIn: Int, movingAttributeIdIn: Long, sortingIndexIn: Long): Unit = {
     val entity = new Entity(dbIn, entityIdIn)
-    entity.updateAttributeSorting(movingAttributeFormIdIn, movingAttributeIdIn, sortingIndexIn)
+    entity.updateAttributeSortingIndex(movingAttributeFormIdIn, movingAttributeIdIn, sortingIndexIn)
   }
 
   protected def getSortingIndex(dbIn: Database, entityIdIn: Long, attributeFormIdIn: Int, attributeIdIn: Long): Long = {
     val entity = new Entity(dbIn, entityIdIn)
-    entity.getEntityAttributeSortingIndex(attributeFormIdIn, attributeIdIn)
+    entity.getAttributeSortingIndex(attributeFormIdIn, attributeIdIn)
   }
 
   protected def indexIsInUse(dbIn: Database, entityIdIn: Long, sortingIndexIn: Long): Boolean = {

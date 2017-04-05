@@ -1,8 +1,8 @@
 /*  This file is part of OneModel, a program to manage knowledge.
-    Copyright in each year of 2003, 2004, 2010, 2011, and 2013-2016 inclusive, Luke A. Call; all rights reserved.
+    Copyright in each year of 2003, 2004, 2010, 2011, and 2013-2017 inclusive, Luke A. Call; all rights reserved.
     OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
-    distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
-    of the License, or (at your option) any later version.  See the file LICENSE for details.
+    distribution, and the GNU Affero General Public License as published by the Free Software Foundation.
+    See the file LICENSE for license version and details.
     OneModel is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
     You should have received a copy of the GNU Affero General Public License along with OneModel.  If not, see <http://www.gnu.org/licenses/>
@@ -230,8 +230,11 @@ class PostgreSQLDatabaseTest extends FlatSpec with MockitoSugar {
     assert(mDB.getAttributeSortingRowsCount(Some(id)) == 5)
 
     mDB.rollbackTrans()
-    //idea: find out: WHY do the next lines fail, because the attrCount(id) is the same (4) after rolling back as before rolling back??
-    // Do I not understand rollback?
+    //idea: (tracked in tasks): find out: WHY do the next lines fail, because the attrCount(id) is the same (4) after rolling back as before rolling back??
+    // Do I not understand rollback?  But it does seem to work as expected in "entity creation/update and transaction rollback" test above.  See also
+    // in EntityTest's "updateClassAndTemplateEntityName", at the last 2 commented lines which fail for unknown reason.  Maybe something obvious i'm just
+    // missing, or maybe it's in the postgresql or jdbc transaction docs.  Could also ck in other places calling db.rollbackTrans to see what's to learn from
+    // current use (risk) & behaviors to compare.
 //    assert(mDB.getAttrCount(id) == 0)
 //    assert(mDB.getAttributeSortingRowsCount(Some(id)) == 0)
   }
@@ -751,6 +754,15 @@ class PostgreSQLDatabaseTest extends FlatSpec with MockitoSugar {
     //assert(mDB.getRelationToGroupCount(entityId) == 0)
   }
 
+  "getGroups" should "work" in {
+    val group3id = mDB.createGroup("g3")
+    val number = mDB.getGroups(0).size
+    val number2 = mDB.getGroups(0, None, Some(group3id)).size
+    assert(number == number2 + 1)
+    val number3 = mDB.getGroups(1).size
+    assert(number == number3 + 1)
+  }
+
   "deleting entity" should "work even if entity is in a relationtogroup" in {
     val startingEntityCount = mDB.getEntitiesOnlyCount()
     val relToGroupName = "test:PSQLDbTest.testDelEntity_InGroup"
@@ -858,14 +870,16 @@ class PostgreSQLDatabaseTest extends FlatSpec with MockitoSugar {
   "entity deletion" should "also delete RelationToLocalEntity attributes (and getRelationToRemoteEntityCount should work)" in {
     val entityId = mDB.createEntity("test: org.onemodel.PSQLDbTest.testRelsNRelTypes()")
     val relTypeId: Long = mDB.createRelationType("is sitting next to", "", RelationType.UNIDIRECTIONAL)
-    val startingCount = mDB.getRelationToLocalEntityCount(entityId)
+    val startingLocalCount = mDB.getRelationToLocalEntityCount(entityId)
+    val startingRemoteCount = mDB.getRelationToRemoteEntityCount(entityId)
     val relatedEntityId: Long = createTestRelationToLocalEntity_WithOneEntity(entityId, relTypeId)
-    assert(mDB.getRelationToLocalEntityCount(entityId) == startingCount + 1)
+    assert(mDB.getRelationToLocalEntityCount(entityId) == startingLocalCount + 1)
 
     val oi: OmInstance = mDB.getLocalOmInstanceData
     val remoteEntityId = 1234
     mDB.createRelationToRemoteEntity(relTypeId, entityId, remoteEntityId, None, 0, oi.getId)
-    assert(mDB.getRelationToLocalEntityCount(entityId) == startingCount + 2)
+    assert(mDB.getRelationToLocalEntityCount(entityId) == startingLocalCount + 1)
+    assert(mDB.getRelationToRemoteEntityCount(entityId) == startingRemoteCount + 1)
     assert(mDB.getRelationToRemoteEntityData(relTypeId, entityId, oi.getId, remoteEntityId).length > 0)
 
     mDB.deleteEntity(entityId)
@@ -1211,7 +1225,6 @@ class PostgreSQLDatabaseTest extends FlatSpec with MockitoSugar {
   "isDuplicateEntityClass and class update/deletion" should "work" in {
     val name: String = "testing isDuplicateEntityClass"
     val (classId, entityId) = mDB.createClassAndItsTemplateEntity(name, name)
-    val entityClass = new EntityClass(mDB, classId)
     assert(EntityClass.isDuplicate(mDB, name))
     assert(!EntityClass.isDuplicate(mDB, name, Some(classId)))
 
@@ -1222,19 +1235,20 @@ class PostgreSQLDatabaseTest extends FlatSpec with MockitoSugar {
     mDB.updateClassName(classId, name)
 
     mDB.updateClassCreateDefaultAttributes(classId, Some(false))
-    val should1: Option[Boolean] = entityClass.getCreateDefaultAttributes
+    val should1: Option[Boolean] = new EntityClass(mDB, classId).getCreateDefaultAttributes
     assert(!should1.get)
     mDB.updateClassCreateDefaultAttributes(classId, None)
-    val should2: Option[Boolean] = entityClass.getCreateDefaultAttributes
+    val should2: Option[Boolean] = new EntityClass(mDB, classId).getCreateDefaultAttributes
     assert(should2.isEmpty)
     mDB.updateClassCreateDefaultAttributes(classId, Some(true))
-    val should3: Option[Boolean] = entityClass.getCreateDefaultAttributes
+    val should3: Option[Boolean] = new EntityClass(mDB, classId).getCreateDefaultAttributes
     assert(should3.get)
 
     mDB.updateEntitysClass(entityId, None)
     mDB.deleteClassAndItsTemplateEntity(classId)
     assert(!EntityClass.isDuplicate(mDB, name, Some(classId)))
     assert(!EntityClass.isDuplicate(mDB, name))
+
   }
 
   "EntitiesInAGroup and getclasses/classcount methods" should "work, and should enforce class_id uniformity within a group of entities" in {
@@ -1446,6 +1460,23 @@ class PostgreSQLDatabaseTest extends FlatSpec with MockitoSugar {
                                      val systemEntityId = mDB.getSystemEntityId
                                      mDB.getTextAttributeByTypeId(systemEntityId, 1L, Some(1))
                                    }
+  }
+
+  "getRelationsToGroupContainingThisGroup and getContainingRelationsToGroup" should "work" in {
+    val entityId: Long = mDB.createEntity("test: getRelationsToGroupContainingThisGroup...")
+    val entityId2: Long = mDB.createEntity("test: getRelationsToGroupContainingThisGroup2...")
+    val relTypeId: Long = mDB.createRelationType("contains in getRelationsToGroupContainingThisGroup", "", RelationType.UNIDIRECTIONAL)
+    val (groupId, rtg) = DatabaseTestUtils.createAndAddTestRelationToGroup_ToEntity(mDB, entityId, relTypeId,
+                                                                                    "some group name in getRelationsToGroupContainingThisGroup")
+    val group = new Group(mDB, groupId)
+    group.addEntity(entityId2)
+    val rtgs = mDB.getRelationsToGroupContainingThisGroup(groupId, 0)
+    assert(rtgs.size == 1)
+    assert(rtgs.get(0).getId == rtg.getId)
+
+    val sameRtgs = mDB.getContainingRelationsToGroup(entityId2, 0)
+    assert(sameRtgs.size == 1)
+    assert(sameRtgs.get(0).getId == rtg.getId)
   }
 
 }

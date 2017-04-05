@@ -1,8 +1,8 @@
 /*  This file is part of OneModel, a program to manage knowledge.
-    Copyright in each year of 2016-2016 inclusive, Luke A. Call; all rights reserved.
+    Copyright in each year of 2016-2017 inclusive, Luke A. Call; all rights reserved.
     OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
-    distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
-    of the License, or (at your option) any later version.  See the file LICENSE for details.
+    distribution, and the GNU Affero General Public License as published by the Free Software Foundation.
+    See the file LICENSE for license version and details.
     OneModel is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
     You should have received a copy of the GNU Affero General Public License along with OneModel.  If not, see <http://www.gnu.org/licenses/>
@@ -587,7 +587,7 @@ class RestDatabase(mRemoteAddress: String) extends Database {
                                    Some(createRelationToGroupRow))
   }
   override def getRelationsToGroupContainingThisGroup(groupIdIn: Long, startingIndexIn: Long, maxValsIn: Option[Long]): util.ArrayList[RelationToGroup] = {
-    getCollection[RelationToGroup]("/groups/" + groupIdIn + "/containingRelationsToGroup/" + startingIndexIn +
+    getCollection[RelationToGroup]("/groups/" + groupIdIn + "/relationsToGroupContainingThisGroup/" + startingIndexIn +
                                    (if (maxValsIn.isEmpty) "" else "?maxVals=" + maxValsIn.get),
                                    Array(),
                                    Some(createRelationToGroupRow))
@@ -690,11 +690,6 @@ class RestDatabase(mRemoteAddress: String) extends Database {
   def createRelationTypeRow(values: Seq[JsValue]): RelationType = {
     new RelationType(this, values(0).asInstanceOf[JsNumber].as[Long],
                      values(1).asInstanceOf[JsString].as[String],
-//%%delaftertesting                     if (values(2) == JsNull) None else Some(values(2).asInstanceOf[JsNumber].as[Long]),
-//                     values(3).asInstanceOf[JsNumber].as[Long],
-//                     if (values(4) == JsNull) None else Some(values(4).asInstanceOf[JsBoolean].as[Boolean]),
-//                     if (values(5) == JsNull) None else Some(values(5).asInstanceOf[JsBoolean].as[Boolean]),
-//                     values(6).asInstanceOf[JsBoolean].as[Boolean],
                      values(7).asInstanceOf[JsString].as[String],
                      values(8).asInstanceOf[JsString].as[String])
   }
@@ -753,8 +748,8 @@ class RestDatabase(mRemoteAddress: String) extends Database {
     }
     (fileSize, md5hash)
   }
-  def processOptionLongsBoolean(response: WSResponse, ignore: Option[(Seq[JsValue]) => Any],
-                                ignore2: Array[Any]): (Option[Long], Option[Long], Option[Long], Boolean) = {
+  def processOptionLongsStringBoolean(response: WSResponse, ignore: Option[(Seq[JsValue]) => Any],
+                                ignore2: Array[Any]): (Option[Long], Option[Long], Option[Long], Option[String], Boolean) = {
     if (response.json == JsNull) {
       throw new OmDatabaseException("Unexpected: null result in the REST response (basically the remote side saying \"found nothing\".")
     } else {
@@ -762,16 +757,18 @@ class RestDatabase(mRemoteAddress: String) extends Database {
       val first: Option[Long] = getOptionLongFromJson(values, 0)
       val second: Option[Long] = getOptionLongFromJson(values, 1)
       val third: Option[Long] = getOptionLongFromJson(values, 2)
-      val last: Boolean = values(3).asInstanceOf[JsBoolean].as[Boolean]
-      (first, second, third, last)
+      val fourth: Option[String] = getOptionStringFromJson(values, 3)
+      val last: Boolean = values(4).asInstanceOf[JsBoolean].as[Boolean]
+      (first, second, third, fourth, last)
     }
   }
-  def getOptionLongsBoolean(pathIn: String): (Option[Long], Option[Long], Option[Long], Boolean) = {
-    RestDatabase.restCall[(Option[Long], Option[Long], Option[Long], Boolean), Any]("http://" + mRemoteAddress + pathIn,
-                                                                                    processOptionLongsBoolean, None, Array())
+  def getOptionLongsStringBoolean(pathIn: String): (Option[Long], Option[Long], Option[Long], Option[String], Boolean) = {
+    RestDatabase.restCall[(Option[Long], Option[Long], Option[Long], Option[String], Boolean), Any]("http://" + mRemoteAddress + pathIn,
+                                                                                    processOptionLongsStringBoolean, None, Array())
   }
-  override def findRelationToAndGroup_OnEntity(entityIdIn: Long, groupNameIn: Option[String]): (Option[Long], Option[Long], Option[Long], Boolean) = {
-    getOptionLongsBoolean("/entities/" + entityIdIn + "/findRelationToAndGroup" +
+  override def findRelationToAndGroup_OnEntity(entityIdIn: Long, 
+                                               groupNameIn: Option[String]): (Option[Long], Option[Long], Option[Long], Option[String], Boolean) = {
+    getOptionLongsStringBoolean("/entities/" + entityIdIn + "/findRelationToAndGroup" +
                           (if (groupNameIn.isEmpty)  "" else "?groupName=" + java.net.URLEncoder.encode(groupNameIn.get, "UTF-8")))
                           // Note: using a different kind of encoder/encoding for a query part of a URI (vs. the path, as elsewhere), per info at:
                           //   https://www.playframework.com/documentation/2.5.x/api/scala/index.html#play.utils.UriEncoding$
@@ -785,6 +782,14 @@ class RestDatabase(mRemoteAddress: String) extends Database {
     if (values(index) == JsNull) None
     else {
       Some(values(index).asInstanceOf[JsNumber].as[Long])
+      // Idea: learn why in some places this needed instead: is there a difference in the way it is sent from the web module? or do both work?:
+      // Some(response.json.as[Long])
+    }
+  }
+  def getOptionStringFromJson(values: IndexedSeq[JsValue], index: Int): Option[String] = {
+    if (values(index) == JsNull) None
+    else {
+      Some(values(index).asInstanceOf[JsString].as[String])
       // Idea: learn why in some places this needed instead: is there a difference in the way it is sent from the web module? or do both work?:
       // Some(response.json.as[Long])
     }
@@ -872,6 +877,8 @@ class RestDatabase(mRemoteAddress: String) extends Database {
 
   // Below are methods that WRITE to the DATABASE.
   //
+  // Things were generated with "override" by the IDE, but after some reading, it seems not worth the bother to always type it.
+  //
   // When implementing later, REMEMBER TO MAKE READONLY OR SECURE (only showing public or allowed data),
   // OR HANDLE THEIR LACK, IN THE UI IN A FRIENDLY WAY.
 
@@ -922,7 +929,7 @@ class RestDatabase(mRemoteAddress: String) extends Database {
   override def updateRelationToLocalEntity(oldRelationTypeIdIn: Long, entityId1In: Long, entityId2In: Long, newRelationTypeIdIn: Long,
                                            validOnDateIn: Option[Long], observationDateIn: Long): Unit = ???
   override def updateSortingIndexInAGroup(groupIdIn: Long, entityIdIn: Long, sortingIndexIn: Long): Unit = ???
-  override def updateAttributeSorting(entityIdIn: Long, attributeFormIdIn: Long, attributeIdIn: Long, sortingIndexIn: Long): Unit = ???
+  override def updateAttributeSortingIndex(entityIdIn: Long, attributeFormIdIn: Long, attributeIdIn: Long, sortingIndexIn: Long): Unit = ???
   override def updateGroup(groupIdIn: Long, nameIn: String, allowMixedClassesInGroupIn: Boolean, newEntriesStickToTopIn: Boolean): Unit = ???
   override def setUserPreference_EntityId(nameIn: String, entityIdIn: Long): Unit = ???
   override def deleteRelationType(idIn: Long): Unit = ???
@@ -930,6 +937,8 @@ class RestDatabase(mRemoteAddress: String) extends Database {
   override def deleteEntity(idIn: Long, callerManagesTransactionsIn: Boolean): Unit = ???
   override def moveRelationToLocalEntityToLocalEntity(rtleIdIn: Long, newContainingEntityIdIn: Long,
                                                       sortingIndexIn: Long): RelationToLocalEntity = ???
+  //NOTE: when implementing the below method (ie, so there is more supporting code then), also create a test (locally though...?) for RTRE.move.
+  // (And while at it, RTRE.getEntityForEntityId2 and RTLE.getEntityForEntityId2 ?  Do they get called?)
   override def moveRelationToRemoteEntityToLocalEntity(remoteInstanceIdIn: String, relationToRemoteEntityIdIn: Long, toContainingEntityIdIn: Long,
                                                        sortingIndexIn: Long): RelationToRemoteEntity = ???
   override def createFileAttribute(parentIdIn: Long, attrTypeIdIn: Long, descriptionIn: String, originalFileDateIn: Long, storedDateIn: Long,
@@ -986,4 +995,5 @@ class RestDatabase(mRemoteAddress: String) extends Database {
   override def getPreferencesContainerId: Long = ???
   override def getUserPreference_EntityId(preferenceNameIn: String, defaultValueIn: Option[Long]): Option[Long] = ???
   override def getOmInstances(localIn: Option[Boolean]): util.ArrayList[OmInstance] = ???
+  def getRelationToLocalEntityDataById(idIn: Long): Array[Option[Any]] = ???
 }

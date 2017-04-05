@@ -1,9 +1,9 @@
 /*  This file is part of OneModel, a program to manage knowledge.
-    Copyright in each year of 2003-2004 and 2008-2016 inclusive, Luke A. Call; all rights reserved.
+    Copyright in each year of 2003-2004 and 2008-2017 inclusive, Luke A. Call; all rights reserved.
     (That copyright statement was previously 2013-2015, until I remembered that much of Controller came from TextUI.scala and TextUI.java before that.)
     OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
-    distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
-    of the License, or (at your option) any later version.  See the file LICENSE for details.
+    distribution, and the GNU Affero General Public License as published by the Free Software Foundation.
+    See the file LICENSE for license version and details.
     OneModel is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
     You should have received a copy of the GNU Affero General Public License along with OneModel.  If not, see <http://www.gnu.org/licenses/>
@@ -58,27 +58,28 @@ class QuickGroupMenu(override val ui: TextUI, val controller: Controller) extend
 
   /** Should be called only if the targetEntityIn has 0 or 1 RelationToGroups (no more).
     */
-  def createNewOrFindOneGroupOnEntity(groupIn: Group, targetEntitysRtgCount: Long, targetEntityIn: Entity): (RelationToGroup, RelationType, Group) = {
+  def createNewOrFindOneGroupOnEntity(groupIn: Group, targetEntitysRtgCount: Long, targetEntityIn: Entity): (Long, Long, Long) = {
     // if there is 1 (obvious) destination, or no RTG on the selected entity (1 can be created), then add new entry there
-    val (targetRtg: RelationToGroup, targetRelType: RelationType, targetGroup: Group) = {
+    val (targetRelationToGroupId: Long, targetRelationTypeId: Long, targetGroupId: Long) = {
       if (targetEntitysRtgCount == 0) {
         val name: String = targetEntityIn.getName
         val (newGroup: Group, newRTG: RelationToGroup) = targetEntityIn.createGroupAndAddHASRelationToIt(name, groupIn.getMixedClassesAllowed,
                                                                                                          System.currentTimeMillis)
-        (newRTG, new RelationType(newRTG.mDB, newRTG.getAttrTypeId), newGroup)
+        (newRTG.getId, newRTG.getAttrTypeId, newGroup.getId)
       } else {
         // given above conditions (w/ moveTargetIndexInObjList, and rtgCount twice), there must be exactly one, or there's a bug:
-        val (rtgId, relTypeId, gid, moreAvailable): (Option[Long], Option[Long], Option[Long], Boolean) = targetEntityIn.findRelationToAndGroup
+        val (rtgId, relTypeId, gid, _, moreAvailable): (Option[Long], Option[Long],
+          Option[Long], Option[String], Boolean) = targetEntityIn.findRelationToAndGroup
+
         if (gid.isEmpty || relTypeId.isEmpty || moreAvailable) throw new OmException("Found " + (if (gid.isEmpty) 0 else ">1") + " but by the earlier " +
                                                                                      "checks, " +
                                                                                      "there should be exactly one group in entity " + targetEntityIn.getId
                                                                                      + ": " +
                                                                                      targetEntityIn.getName)
-        //%%IN DEBUG: how *can* this work, to return IDs to attr types?? why didn't compiler catch it? would it get a runtime err in the test or if not what happens when run?
-        (rtgId, relTypeId, gid)
+        (rtgId.get, relTypeId.get, gid.get)
       }
     }
-    (targetRtg, targetRelType, targetGroup)
+    (targetRelationToGroupId, targetRelationTypeId, targetGroupId)
   }
 
   def moveSelectedEntry(groupIn: Group, startingDisplayRowIndexIn: Int, relationToGroupIn: Option[RelationToGroup], targetForMovesIn: Option[Entity],
@@ -150,9 +151,9 @@ class QuickGroupMenu(override val ui: TextUI, val controller: Controller) extend
             } else {
               if (defaultToUsingSubgroup.get) {
                 // if there is 1 (obvious) destination, or no RTG on the selected entity (1 can be created), then move it there
-                val (_, _, targetGroup) = createNewOrFindOneGroupOnEntity(groupIn, targetRtgCount, targetForMovesIn.get)
+                val (_, _, targetGroupId) = createNewOrFindOneGroupOnEntity(groupIn, targetRtgCount, targetForMovesIn.get)
                 // about the sortingIndex:  see comment on db.moveEntityToNewGroup.
-                groupIn.moveEntityToDifferentGroup(targetGroup.getId, highlightedObjId, getSortingIndex(groupIn.mDB, groupIn.getId, -1, highlightedObjId))
+                groupIn.moveEntityToDifferentGroup(targetGroupId, highlightedObjId, getSortingIndex(groupIn.mDB, groupIn.getId, -1, highlightedObjId))
               } else {
                 // getting here means to just create a RelationToLocalEntity on the entity, not a subgroup:
                 groupIn.moveEntityFromGroupToLocalEntity(targetForMovesIn.get.getId, highlightedObjId, getSortingIndex(groupIn.mDB, groupIn.getId,
@@ -373,18 +374,19 @@ class QuickGroupMenu(override val ui: TextUI, val controller: Controller) extend
                     quickGroupMenu(groupIn, startingDisplayRowIndexIn, relationToGroupIn, Some(highlightedEntry), targetForMovesIn, callingMenusRtgIn,
                                    containingEntityIn)
                   } else {
-                    val (rtg: RelationToGroup, relType: RelationType, targetGroup: Group) = createNewOrFindOneGroupOnEntity(groupIn, targetRtgCount, highlightedEntry)
+                    val (rtgId: Long, relTypeId: Long, targetGroupId: Long) = createNewOrFindOneGroupOnEntity(groupIn, targetRtgCount, highlightedEntry)
                     // about the sortingIndex:  see comment on db.moveEntityToNewGroup.
                     val ans: Option[Entity] = controller.askForNameAndWriteEntity(groupIn.mDB, Util.ENTITY_TYPE, leadingTextIn = Some("NAME THE ENTITY:"),
                                                                                   classIdIn = groupIn.getClassId)
                     if (ans.isDefined) {
                       val newEntityId: Long = ans.get.getId
                       val newEntity: Entity = ans.get
+                      val targetGroup = new Group(groupIn.mDB, targetGroupId)
                       targetGroup.addEntity(newEntityId)
 
                       controller.defaultAttributeCopying(newEntity)
 
-                      val newRtg: RelationToGroup = new RelationToGroup(rtg.mDB, rtg.getId, highlightedEntry.getId, relType.getId, targetGroup.getId)
+                      val newRtg: RelationToGroup = new RelationToGroup(groupIn.mDB, rtgId, highlightedEntry.getId, relTypeId, targetGroup.getId)
                       quickGroupMenu(new Group(targetGroup.mDB, targetGroup.getId), 0, Some(newRtg), None, None, containingEntityIn = Some(highlightedEntry))
                     }
                     quickGroupMenu(groupIn, startingDisplayRowIndexIn, relationToGroupIn, Some(highlightedEntry), targetForMoves, callingMenusRtgIn, containingEntityIn)
@@ -543,16 +545,17 @@ class QuickGroupMenu(override val ui: TextUI, val controller: Controller) extend
     }
   }
 
-  private def useSubgroup(highlightedEntry: Entity): (Long, Option[Boolean]) = {
-    val targetRtgCount: Long = highlightedEntry.getRelationToGroupCount
+  private def useSubgroup(targetEntry: Entity): (Long, Option[Boolean]) = {
+    val targetRtgCount: Long = targetEntry.getRelationToGroupCount
     val defaultToUsingSubgroup: Option[Boolean] = {
       if (targetRtgCount == 0) {
-        // the user could create one manually if desired; another idea is in the commit where I added this line, in a removed comment/code.
         Some(false)
       } else if (targetRtgCount == 1) {
         Some(true)
       } else {
-        throw new OmException("Didn't expect to get to this point.")
+        ui.displayText("There are multiple subgroups on this entity, so for now OM will just move the one entry to be contained by the" +
+                       " other entity, to which you can then manually go and move it further to a subgroup as needed.")
+        Some(false)
       }
     }
     (targetRtgCount, defaultToUsingSubgroup)

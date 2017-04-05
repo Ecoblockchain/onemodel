@@ -1,6 +1,6 @@
 /*
     This file is part of OneModel, a program to manage knowledge.
-    Copyright in each year of 2016-2016 inclusive, Luke A. Call; all rights reserved.
+    Copyright in each year of 2016-2017 inclusive, Luke A. Call; all rights reserved.
     OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
     distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
     of the License, or (at your option) any later version.  See the file LICENSE for details.
@@ -50,13 +50,13 @@ accordingly. I've curated a short list of the ones that you definitely should be
 
 class Rest extends play.api.mvc.Controller {
   val (user, pass) = Util.getDefaultUserInfo
-
   // USE ONLY 1 OF THE NEXT 2 "val db ..." LINES AT A TIME:
   // (Idea, also tracked in tasks: how best to properly automate this, so it works for testing in the test db or manual use as needed?)
-  // This one is when testing manually from a client that wants to connect to the main DB via rest:
+  // This one is when testing manually from a client that wants to connect to the main (real) DB via rest:
 //  val db = new PostgreSQLDatabase(user, pass)
 //   This one is for when running the tests in the core module's RestDatabaseTest:
-  val db = new PostgreSQLDatabase(Database.TEST_USER, Database.TEST_USER)
+  // (Getting a PostgreSQLDatabase not a Database here, because it actually does need to hit the real data: is not a call to another REST endpoint.)
+  val db: PostgreSQLDatabase = new PostgreSQLDatabase(Database.TEST_USER, Database.TEST_USER)
 
   def id: Action[AnyContent] = Action { implicit request =>
     // This puts quotes around it...
@@ -76,7 +76,7 @@ class Rest extends play.api.mvc.Controller {
   implicit val entityWrites = new Writes[Entity] {
     def writes(entityIn: Entity) = {
       /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
-      val attributeTuples: Array[(Long, Attribute)] = entityIn.getAttributes(onlyPublicEntitiesIn = true)._1
+      val attributeTuples: Array[(Long, Attribute)] = entityIn.getSortedAttributes(onlyPublicEntitiesIn = true)._1
       val attributes: Array[Attribute] = new Array[Attribute](attributeTuples.length)
       var index = 0
       for (attrTuple <- attributeTuples) {
@@ -520,6 +520,12 @@ class Rest extends play.api.mvc.Controller {
   /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
   def getContainingRelationsToGroup(entityId: Long, startingIndexIn: Long, limit: Option[Long]): Action[AnyContent] = Action { implicit request =>
     val results: util.ArrayList[RelationToGroup] = db.getContainingRelationsToGroup(entityId, startingIndexIn, limit)
+    getRelationsToGroupAsJson(results)
+  }
+
+  /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
+  def getRelationsToGroupContainingThisGroup(groupId: Long, startingIndexIn: Long, limit: Option[Long]): Action[AnyContent] = Action { implicit request =>
+    val results: util.ArrayList[RelationToGroup] = db.getRelationsToGroupContainingThisGroup(groupId, startingIndexIn, limit)
     getRelationsToGroupAsJson(results)
   }
 
@@ -1220,11 +1226,13 @@ class Rest extends play.api.mvc.Controller {
 
   /* * * * **ONLY PROVIDE PUBLIC INFO (SAME COMMENT IN BOTH MODULES, EVERYWHERE!): HOW TO REMEMBER/BE SURE?? (4now at least) */
   def findRelationToAndGroup_OnEntity(entityIdIn: Long, groupNameIn: Option[String]): Action[AnyContent] = Action { implicit request =>
-    val result: (Option[Long], Option[Long], Option[Long], Boolean) = db.findRelationToAndGroup_OnEntity(entityIdIn, groupNameIn)
+//    val result: (Option[Long], Option[Long], Option[Long], Boolean) = db.findRelationToAndGroup_OnEntity(entityIdIn, groupNameIn)
+    val result: (Option[Long], Option[Long], Option[Long], Option[String], Boolean) = db.findRelationToAndGroup_OnEntity(entityIdIn, groupNameIn)
     val json: JsValue = Json.obj("relationToGroupId" -> result._1,
                                  "relationTypeId" -> result._2,
                                  "groupId" -> result._3,
-                                 "moreRowsAvailable" -> result._4.asInstanceOf[Boolean]
+                                 "name" -> result._4,
+                                 "moreRowsAvailable" -> result._5.asInstanceOf[Boolean]
                                 )
     Ok(Json.prettyPrint(json)).as(JSON)
   }

@@ -1,9 +1,9 @@
 /*  This file is part of OneModel, a program to manage knowledge.
-    Copyright in each year of 2003-2004 and 2008-2016 inclusive, Luke A Call; all rights reserved.
+    Copyright in each year of 2003-2004 and 2008-2017 inclusive, Luke A Call; all rights reserved.
     (That copyright statement earlier omitted 2003-2004, until I remembered that much of Controller came from TextUI.scala and TextUI.java before that.)
     OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
-    distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
-    of the License, or (at your option) any later version.  See the file LICENSE for details.
+    distribution, and the GNU Affero General Public License as published by the Free Software Foundation.
+    See the file LICENSE for license version and details.
     OneModel is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
     You should have received a copy of the GNU Affero General Public License along with OneModel.  If not, see <http://www.gnu.org/licenses/>
@@ -77,7 +77,7 @@ class ClassMenu(val ui: TextUI, controller: Controller) {
             val groupCount: Long = templateEntity.getCountOfContainingGroups
             val (entityCountNonArchived, entityCountArchived) = templateEntity.getCountOfContainingLocalEntities
             val ans = ui.askYesNoQuestion("DELETE CLASS \"" + name + "\" AND its template ENTITY \"" + templateEntityName + "\" with " +
-                                          Util.entityPartsThatCanBeAffected + ".  **ARE YOU REALLY SURE?**  (The template entity is " +
+                                          Util.entityPartsThatCanBeAffected + ".  \n**ARE YOU REALLY SURE?**  (The template entity is " +
                                          Util.getContainingEntitiesDescription(entityCountNonArchived, entityCountArchived) + ", and " +
                                           groupCount + " groups.)")
             if (ans.isDefined && ans.get) {

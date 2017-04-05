@@ -1,0 +1,1 @@
+This directory (at least initially) is for integration tests, to be run by the maven failsafe plugin.

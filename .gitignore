@@ -16,3 +16,6 @@ dependency-reduced-pom.xml
 testscalaworksheet.sc
 testrun.log
 testrun.sum
+dbg.log
+rt
+

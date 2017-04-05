@@ -1,9 +1,9 @@
 /*  This file is part of OneModel, a program to manage knowledge.
-    Copyright in each year of 2003-2004 and 2008-2016 inclusive, Luke A. Call; all rights reserved.
+    Copyright in each year of 2003-2004 and 2008-2017 inclusive, Luke A. Call; all rights reserved.
     (That copyright statement was previously 2013-2015, until I remembered that much of Controller came from TextUI.scala and TextUI.java before that.)
     OneModel is free software, distributed under a license that includes honesty, the Golden Rule, guidelines around binary
-    distribution, and the GNU Affero General Public License as published by the Free Software Foundation, either version 3
-    of the License, or (at your option) any later version.  See the file LICENSE for details.
+    distribution, and the GNU Affero General Public License as published by the Free Software Foundation.
+    See the file LICENSE for license version and details.
     OneModel is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
     You should have received a copy of the GNU Affero General Public License along with OneModel.  If not, see <http://www.gnu.org/licenses/>
@@ -152,17 +152,20 @@ class GroupMenu(val ui: TextUI, val controller: Controller) {
                                                                                              relationToGroupIn.get.getGroupId,
                                                                                              relationToGroupIn.get.getValidOnDate,
                                                                                              relationToGroupIn.get.getObservationDate)
-            controller.askForInfoAndUpdateAttribute[RelationToGroupDataHolder](relationToGroupIn.get.mDB, relationToGroupDH, askForAttrTypeId = true,
-                                                                               Util.RELATION_TO_GROUP_TYPE,
-                                                                              "CHOOSE TYPE OF [correct me: or edit existing?] Relation to Entity:",
-                                                                              controller.askForRelToGroupInfo, updateRelationToGroup)
-            //force a reread from the DB so it shows the right info on the repeated menu:
-            groupMenu(groupIn,
-                      displayStartingRowNumberIn,
-                      Some(new RelationToGroup(relationToGroupIn.get.mDB, relationToGroupIn.get.getId, relationToGroupDH.entityId,
-                                               relationToGroupDH.attrTypeId, relationToGroupDH.groupId)),
-                      callingMenusRtgIn,
-                      containingEntityIn)
+            val (newRelationToGroup: Option[RelationToGroup], newGroup: Group) = {
+              if (controller.askForInfoAndUpdateAttribute[RelationToGroupDataHolder](relationToGroupIn.get.mDB, relationToGroupDH, askForAttrTypeId = true,
+                                                                                     Util.RELATION_TO_GROUP_TYPE,
+                                                                                     "CHOOSE TYPE OF [%%correct me: or edit existing?] Relation to Entity:",
+                                                                                     controller.askForRelToGroupInfo, updateRelationToGroup)) {
+                //force a reread from the DB so it shows the right info on the repeated menu, for these things which could have been changed:
+                (Some(new RelationToGroup(relationToGroupIn.get.mDB, relationToGroupIn.get.getId, relationToGroupDH.entityId,
+                                         relationToGroupDH.attrTypeId, relationToGroupDH.groupId)),
+                  new Group(groupIn.mDB, relationToGroupDH.groupId))
+              } else {
+                (relationToGroupIn, groupIn)
+              }
+            }
+            groupMenu(newGroup, displayStartingRowNumberIn, newRelationToGroup, callingMenusRtgIn, containingEntityIn)
           } else if (ans == 2 && ans <= choices.length) {
             val entity: Option[Entity] =
               if (numContainingEntities == 1) {
